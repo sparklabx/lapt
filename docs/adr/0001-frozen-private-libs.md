@@ -1,0 +1,3 @@
+# Frozen-private runtime libraries, no shared lib pool
+
+Each `opt/<pkg>` gets a full, self-sufficient copy of every closure member's `lib/` at assemble time. We considered a shared `$HOME/.local/lib` pool with wrapper scripts pointing `LD_LIBRARY_PATH` at it, so that installing a package with a newer patched lib would auto-propagate to every already-installed consumer. Rejected: it reintroduces reference-counting on `remove` (must know whether any other installed package's manifest still needs the shared file before deleting it), which conflicts with the "no manifest" design (see [ADR-0002](./0002-no-manifest-no-jq.md)). Runtime libs are frozen-private per top-level install, full stop — the cost is disk duplication across installs, not correctness risk.

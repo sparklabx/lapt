@@ -1,0 +1,3 @@
+# No package-ownership manifest, no jq dependency
+
+lapt keeps no database of installed files or which package owns what. Bin exposure is re-derived at `remove` time by listing `opt/<pkg>/bin/*` (symmetric with how `install` created it), and `lapt list` re-derives state by reading each `opt/<pkg>/.lapt-version`. An earlier design kept a jq-parsed JSON manifest for richer version tracking; dropped because the only thing left to track once bin exposure is re-derivable is a single version+timestamp per package, which a tiny key=value file already covers — not worth a manifest file, a jq dependency, or the staleness risk of tracked state drifting from the filesystem it describes.

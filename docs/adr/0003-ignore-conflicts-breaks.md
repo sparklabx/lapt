@@ -1,0 +1,3 @@
+# Dependency resolution ignores Conflicts/Breaks
+
+Closures are resolved via `apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances` — Depends+PreDepends only. Real apt would refuse to co-install two packages that declare a Conflict on each other (e.g. two mutually-exclusive `-dev` packages both shipping `include/GL/gl.h`); lapt never reads that metadata at all. This is a deliberate simplification, not an oversight — the assemble/vendor-time file-collision check (hard-abort on any two closure members claiming the same destination path) is the sole safety net covering what Conflicts would have caught. If collision detection is ever weakened or bypassed, this gap reopens.
