@@ -36,8 +36,8 @@ running them adds a dependency on tools that may not be installed, for a
 purely cosmetic immediacy gain a user can trigger themselves.
 
 **Removal via a per-package list, not a shared-dir scan.** `assemble` writes
-`opt/<pkg>/.lapt-exposed` — a flat list, one `$HOME`-relative path per line,
-no manifest format, no jq (same spirit as `.lapt-version`) — recording
+`opt/<pkg>/.lapt/exposed` — a flat list, one `$HOME`-relative path per line,
+no manifest format, no jq (same spirit as `.lapt/version`) — recording
 every symlink it created for that package. `remove` reads this file and
 unlinks each listed path directly: O(this package's own exposed entries).
 The alternative — walking every shared exposure dir on every removal,
@@ -51,6 +51,6 @@ exposed name. This check is bounded by this package's own entry count, so
 it doesn't reintroduce the scan cost being avoided.
 
 This does not reopen ADR-0002's core decision (no global ownership
-database, no jq). `.lapt-exposed` is scoped to one package, lives inside
+database, no jq). `.lapt/exposed` is scoped to one package, lives inside
 that package's own `opt/<pkg>/`, and is deleted along with it — it records
 what `assemble` did, it doesn't track ownership across packages.
