@@ -24,13 +24,30 @@ said the installed version gets checked "against the version constraint the
 closure resolution already carries." Verified live against real
 `apt-cache depends --recurse` output for several packages: it never emits a
 version constraint on a `Depends:`/`PreDepends:` line, only bare package
-names — so there is no such constraint for `resolve_closure` to carry.
-`is_system_satisfied` instead compares the installed version against
-`apt-cache policy`'s current *candidate* version for that name
-(`dpkg --compare-versions installed ge candidate`) — a proxy, not a real
-per-edge floor, but one that only errs safe: it can needlessly re-fetch an
-already-fine dependency on a pinned/held-back host, never silently accept
-one too old.
+names — so there is no such constraint for `resolve_closure` to carry (the
+constraint is a property of the edge, e.g. `libcurl4 -> libssl3 (>= 3.0.0)`,
+which only `apt-cache show <owner>`'s free-text `Depends:` field exposes;
+`resolve_closure` never sees it, and by the time `is_system_satisfied` runs,
+the group string it's given has no owner in scope to look one up for
+anyway).
+
+An intermediate version of this check compared the installed version
+against `apt-cache policy`'s current *candidate* version instead
+(`dpkg --compare-versions installed ge candidate`), on the theory that it
+was a safe-if-imprecise proxy. Real-world testing (installing `curl`) showed
+it was too strict in practice — it rejected packages real `apt install curl`
+leaves untouched (e.g. `libssl3`, `libgnutls30`, both older than the current
+candidate but still what apt considers satisfying). Version comparison is
+now dropped entirely: `is_system_satisfied` only checks that the package
+name is installed at all, matching how real apt treats the common
+unversioned `Depends:` case, and Debian's own package-naming convention
+(an ABI break forces a new package name, e.g. `libssl1.1` -> `libssl3`)
+means any installed version under a given name is link-compatible. This can
+still be wrong for the minority of edges that carry a real floor
+(`libgssapi-krb5-2 (>= 1.17)`) — an installed version below that floor would
+be wrongly accepted — but doing better requires threading per-edge
+constraints through `resolve_closure`'s flat closure model, a much larger
+change nothing has asked for yet.
 
 ## Top-level package: notify and skip entirely
 
@@ -65,7 +82,7 @@ untracked landmine.
 
 `lapt fix <pkg>` (new subcommand) re-verifies every entry in
 `.lapt/system-deps` against current `dpkg` state. Anything no longer
-installed or no longer version-satisfying gets fetched and bundled into
+installed gets fetched and bundled into
 `opt/<pkg>/` now — a partial re-assemble, including regenerating the
 `.wrap` wrapper if bundling newly triggers it (a package that was entirely
 system-satisfied has no wrapper at all until `fix` needs one). `install` on

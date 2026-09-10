@@ -85,10 +85,11 @@ test_not_installed_is_unsatisfied() {
   teardown_fakes
 }
 
-# installed, but older than apt's current candidate: not satisfied (ADR-0007
-# efficiency choice, Option 2 -- see conversation: proxy for a real version
-# floor we have no per-edge constraint for)
-test_installed_older_than_candidate_is_unsatisfied() {
+# installed, but older than apt's current candidate: version comparison is
+# out of scope (no per-edge constraint is available to compare against --
+# see ADR-0007 correction; real apt itself treats an unversioned Depends as
+# satisfied by mere presence). Any installed version satisfies.
+test_installed_present_regardless_of_version_is_satisfied() {
   setup_fakes
   fixture_installed libfoo 1.0
   fixture_candidate libfoo 2.0
@@ -96,11 +97,8 @@ test_installed_older_than_candidate_is_unsatisfied() {
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" lapt::is_system_satisfied libfoo)
   rc=$?
-  assert_eq "stale installed version: no output" "" "$out"
-  if [[ $rc -eq 0 ]]; then
-    printf 'FAIL: %s\n  expected nonzero exit, got 0\n' "stale version exits nonzero"
-    fail=1
-  fi
+  assert_eq "satisfied regardless of version, prints installed version" "libfoo 1.0" "$out"
+  assert_eq "satisfied exits 0" "0" "$rc"
 
   teardown_fakes
 }
@@ -124,6 +122,6 @@ test_or_group_satisfied_by_non_first_alternative() {
 
 test_single_name_satisfied_prints_name_and_version
 test_not_installed_is_unsatisfied
-test_installed_older_than_candidate_is_unsatisfied
+test_installed_present_regardless_of_version_is_satisfied
 test_or_group_satisfied_by_non_first_alternative
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi
