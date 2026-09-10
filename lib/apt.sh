@@ -11,7 +11,7 @@ lapt::_apt_finalize_providers() {
   IFS='|' read -r -a toks <<<"$last"
   local t e dup
   for t in "${toks[@]}"; do
-    [[ $t == "$virtual" ]] && continue
+    [[ $t == "$virtual" && $virtual == \<*\> ]] && continue
     newtoks+=("$t")
   done
   for t in "${providers[@]}"; do
@@ -66,13 +66,11 @@ lapt::resolve_closure() {
         group=$name
       fi
       blockdeps[$cur]+="${blockdeps[$cur]:+$'\n'}$group"
-      if [[ $name == \<*\> ]]; then
-        collecting=1 last_owner=$cur last_virtual=$name providers=()
-      fi
+      collecting=1 last_owner=$cur last_virtual=$name providers=()
       continue
     fi
-    # deeper-indented provider lines not tied to a preceding virtual name:
-    # not yet handled (later slice)
+    # 4-space-indented line with no preceding Depends/PreDepends: unreachable
+    # per apt-cache's own grammar (providers always follow a dep line).
   done
   (( collecting )) && lapt::_apt_finalize_providers "$last_owner" "$last_virtual" "${providers[@]}"
 

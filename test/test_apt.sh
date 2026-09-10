@@ -95,7 +95,34 @@ libc6'
   assert_eq "virtual alternative replaced by its real providers, deduped" "$expected" "$actual"
 }
 
+# real `apt-cache depends --recurse` output includes cases where a plain
+# (non-virtual, non-piped) dependency name also has an alternative provider
+# listed via indentation -- e.g. libpulse0's `Depends: libsystemd0` followed
+# by `libelogind0` (no angle brackets: libsystemd0 is a real, fetchable
+# package). Unlike a virtual placeholder, the original name must be kept,
+# not dropped -- either one satisfies it. libelogind0's own further
+# dependency (libcap2, present in the same stream) must not leak into the
+# closure, since the OR-group it's now part of is never recursed into.
+test_real_name_with_alternative_provider_is_kept_and_extended() {
+  local input='libpulse0
+  Depends: libc6
+  Depends: libsystemd0
+    libelogind0
+  Depends: libx11-6
+libc6
+libelogind0
+  Depends: libcap2
+libx11-6
+libcap2'
+
+  local expected=$'libc6\nlibsystemd0|libelogind0\nlibx11-6'
+  local actual
+  actual=$(printf '%s\n' "$input" | lapt::resolve_closure)
+  assert_eq "real name kept, provider appended as alternative, not recursed into" "$expected" "$actual"
+}
+
 test_linear_closure_excludes_self_and_dedups
 test_or_group_is_opaque_and_not_recursed_into
 test_virtual_alternative_replaced_by_its_providers
+test_real_name_with_alternative_provider_is_kept_and_extended
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi
