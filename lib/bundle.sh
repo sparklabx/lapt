@@ -26,7 +26,7 @@ lapt::bundle_manifest() {
       fi
       seen[$rel]=$origin
       rows+=("$rel"$'\t'"$f"$'\t'"$origin")
-    done < <(find "$cache_path" -type f -print0)
+    done < <(find "$cache_path" \( -type f -o -type l \) -print0)
   done
 
   printf '%s\n' "${rows[@]}"

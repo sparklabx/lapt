@@ -132,10 +132,34 @@ test_collision_against_existing_dest_file_aborts() {
   rm -rf "$LAPT_CACHE_ROOT" "$dest"
 }
 
+# a symlink in the cache entry (e.g. a shared library's SONAME symlink) is
+# included as a row, not just regular files -- real curl install exposed
+# this: libcurl.so.4 -> libcurl.so.4.8.0 is what the dynamic linker actually
+# looks up, and it was silently dropped
+test_symlink_in_cache_entry_is_a_row() {
+  setup_cache
+  local dest; dest=$(mktemp -d)
+  mkdir -p "$LAPT_CACHE_ROOT/foo_1.0/usr/lib"
+  : > "$LAPT_CACHE_ROOT/foo_1.0/usr/lib/libfoo.so.1.0.0"
+  ln -s libfoo.so.1.0.0 "$LAPT_CACHE_ROOT/foo_1.0/usr/lib/libfoo.so.1"
+
+  local out
+  out=$(lapt::bundle_manifest "$dest" "foo:1.0:foo" | sort)
+  assert_eq "both the real file and its symlink are rows" \
+    "$(printf '%s\n' \
+      "lib/libfoo.so.1	$LAPT_CACHE_ROOT/foo_1.0/usr/lib/libfoo.so.1	foo" \
+      "lib/libfoo.so.1.0.0	$LAPT_CACHE_ROOT/foo_1.0/usr/lib/libfoo.so.1.0.0	foo" \
+      | sort)" \
+    "$out"
+
+  rm -rf "$LAPT_CACHE_ROOT" "$dest"
+}
+
 test_single_file_strips_usr
 test_multiarch_triplet_under_lib_stripped
 test_two_members_no_collision
 test_collision_between_members_aborts
 test_existing_dest_file_is_a_row
 test_collision_against_existing_dest_file_aborts
+test_symlink_in_cache_entry_is_a_row
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi
