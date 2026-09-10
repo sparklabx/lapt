@@ -13,3 +13,14 @@ lapt::expose_add() {
     echo "$rel"
   done
 }
+
+lapt::expose_remove() {
+  local opt_dir=$1 dest_home=$2
+  local rel dest
+  while IFS= read -r rel; do
+    dest="$dest_home/$rel"
+    [[ -L $dest ]] || continue
+    [[ $(readlink -f "$dest") == "$opt_dir/$rel" ]] || continue
+    rm -f "$dest"
+  done
+}
