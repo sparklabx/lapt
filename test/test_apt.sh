@@ -36,5 +36,40 @@ gcc-12-base'
   assert_eq "linear closure, self excluded, deduped, first-seen order" "$expected" "$actual"
 }
 
+# real `apt-cache depends --recurse ...` output for `readline-common`: its only
+# dependency is a real (non-virtual) OR-alternative `dpkg | install-info`, and
+# both alternatives have their own further dependencies in the same stream.
+# The closure must contain the opaque group and nothing pulled in from either
+# alternative's own subtree -- which one is chosen is not resolve_closure's job.
+test_or_group_is_opaque_and_not_recursed_into() {
+  local input='readline-common
+ |Depends: dpkg
+  Depends: install-info
+dpkg
+  PreDepends: libbz2-1.0
+  PreDepends: libc6
+  Depends: tar
+install-info
+  Depends: libc6
+libbz2-1.0
+  Depends: libc6
+libc6
+  Depends: libgcc-s1
+tar
+  PreDepends: libacl1
+  PreDepends: libc6
+libacl1
+  Depends: libc6
+libgcc-s1
+  Depends: gcc-12-base
+gcc-12-base'
+
+  local expected='dpkg|install-info'
+  local actual
+  actual=$(printf '%s\n' "$input" | lapt::resolve_closure)
+  assert_eq "OR-group is the sole, opaque closure member" "$expected" "$actual"
+}
+
 test_linear_closure_excludes_self_and_dedups
+test_or_group_is_opaque_and_not_recursed_into
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi
