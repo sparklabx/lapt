@@ -23,6 +23,20 @@ lapt::is_system_satisfied() {
   return 1
 }
 
+lapt::pick_candidate() {
+  local group=$1
+  local -a names
+  IFS='|' read -r -a names <<<"$group"
+  local name candidate
+  for name in "${names[@]}"; do
+    candidate=$(apt-cache policy "$name" 2>/dev/null | sed -n 's/^  Candidate: //p')
+    [[ -n $candidate ]] || continue
+    printf '%s %s\n' "$name" "$candidate"
+    return 0
+  done
+  return 1
+}
+
 lapt::_apt_finalize_providers() {
   local owner=$1 virtual=$2; shift 2
   local -a providers=("$@")
