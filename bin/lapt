@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -u
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$ROOT/lib/apt.sh"
+. "$ROOT/lib/bundle.sh"
+. "$ROOT/lib/expose.sh"
+. "$ROOT/lib/wrap.sh"
+. "$ROOT/lib/state.sh"
+. "$ROOT/lib/cache.sh"
+
+lapt::die() { echo "lapt: $*" >&2; exit 1; }
+
+LAPT_OPT_ROOT=${LAPT_OPT_ROOT:-$HOME/.local/share/lapt/opt}
+
+cmd_install() {
+  local pkg=$1
+  local opt_dir="$LAPT_OPT_ROOT/$pkg"
+
+  if [[ -d $opt_dir ]]; then
+    echo "lapt: $pkg is already installed — run 'lapt remove $pkg' first"
+    return 0
+  fi
+
+  if dpkg -s "$pkg" >/dev/null 2>&1; then
+    echo "lapt: $pkg is already installed via the system package manager"
+    return 0
+  fi
+
+  local version
+  version=$(apt-cache policy "$pkg" | sed -n 's/^  Candidate: //p')
+  [[ -n $version ]] || lapt::die "no apt candidate found for $pkg"
+
+  lapt::cache_ensure "$pkg" "$version" || lapt::die "failed to fetch $pkg=$version"
+  local cache_path; cache_path=$(lapt::cache_entry_path "$pkg" "$version")
+
+  if [[ -z $(find "$cache_path/usr/bin" -type f -print -quit 2>/dev/null) ]]; then
+    lapt::die "$pkg has no executables of its own — use 'lapt vendor' for library-only packages"
+  fi
+
+  local closure
+  closure=$(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts \
+    --no-breaks --no-replaces --no-enhances "$pkg" | lapt::resolve_closure)
+
+  local -a specs=("$pkg:$version:$pkg")
+  local system_deps=""
+  local group sat
+  while IFS= read -r group; do
+    [[ -z $group ]] && continue
+    if sat=$(lapt::is_system_satisfied "$group"); then
+      system_deps+="$sat"$'\n'
+      continue
+    fi
+    local pick name dep_version
+    pick=$(lapt::pick_candidate "$group") || lapt::die "no apt candidate for $group"
+    read -r name dep_version <<<"$pick"
+    lapt::cache_ensure "$name" "$dep_version" || lapt::die "failed to fetch $name=$dep_version"
+    specs+=("$name:$dep_version:$name")
+  done <<<"$closure"
+
+  # Assemble into a scratch dir first, sibling of opt_dir on the same
+  # filesystem, and only mv it into place once everything below succeeds --
+  # otherwise a failure partway through would leave opt_dir existing-but-
+  # incomplete, and the already-installed check above would treat that as a
+  # permanently "done" install with no way to retry. Same atomic-mv pattern
+  # lapt::cache_ensure already uses for cache entries.
+  mkdir -p "$LAPT_OPT_ROOT"
+  local work_dir; work_dir=$(mktemp -d "$LAPT_OPT_ROOT/.tmp.XXXXXX")
+
+  local manifest
+  manifest=$(lapt::bundle_manifest "$work_dir" "${specs[@]}") || { rm -rf "$work_dir"; lapt::die "bundle failed for $pkg"; }
+  lapt::bundle_apply "$work_dir" 0 <<<"$manifest"
+
+  local dest_home="$HOME/.local"
+  local wrapper_kind; wrapper_kind=$(printf '%s\n' "$manifest" | lapt::needs_wrapper "$pkg")
+  if [[ -n $wrapper_kind ]]; then
+    local lib_dir="" bin_dir=""
+    [[ $wrapper_kind == *lib* ]] && lib_dir="$opt_dir/lib"
+    [[ $wrapper_kind == *bin* ]] && bin_dir="$opt_dir/bin"
+    # work_dir is where the files physically live right now; opt_dir is the
+    # final path they'll run from once the mv below lands, so the wrapper's
+    # baked-in exec target must point there, not at work_dir.
+    printf '%s\n' "$manifest" | lapt::wrap_top_level_bins "$work_dir" "$opt_dir" "$pkg" "$lib_dir" "$bin_dir"
+  fi
+
+  lapt::version_write "$work_dir" "$version"
+  # expose_add's symlinks embed $opt_dir (the final path) even though the
+  # files are still physically under $work_dir -- they resolve as soon as
+  # the mv below lands.
+  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$dest_home" "$pkg" > "$work_dir/.lapt/exposed"
+  printf '%s' "$system_deps" | lapt::system_deps_write "$work_dir"
+
+  mv "$work_dir" "$opt_dir"
+}
+
+case "${1:-}" in
+  install) shift; cmd_install "$@" ;;
+  *) lapt::die "unknown subcommand: ${1:-}" ;;
+esac
