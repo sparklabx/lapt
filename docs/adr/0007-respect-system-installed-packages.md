@@ -70,9 +70,10 @@ briefly stale if the host's `apt upgrade`/`apt remove` changes something
 exception: it only ever applies to closure members that were *eligible to
 be skipped in the first place* (declared, satisfied at install time);
 anything actually bundled — including the top-level package always —
-remains exactly as frozen-private as before. Vendor is out of scope for
-this decision; it's a different operation (build-time linking) and not
-addressed here.
+remains exactly as frozen-private as before. Vendor was originally scoped
+out of this decision as a different operation (build-time linking); see
+[ADR-0009](./0009-vendor-respects-system-packages.md), which reverses that
+and extends the same skip to `vendor`.
 
 ## Implementation note: `fix` re-resolves nothing, appends only
 
