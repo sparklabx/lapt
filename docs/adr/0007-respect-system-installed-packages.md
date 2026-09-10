@@ -73,3 +73,19 @@ anything actually bundled — including the top-level package always —
 remains exactly as frozen-private as before. Vendor is out of scope for
 this decision; it's a different operation (build-time linking) and not
 addressed here.
+
+## Implementation note: `fix` re-resolves nothing, appends only
+
+`fix`'s partial re-assemble must not re-resolve the closure or touch
+anything already bundled — that's what keeps the frozen-private trade-off
+above "scoped." Concretely: it fetches only the specific `.lapt/system-deps`
+entries that failed re-verification, using the version already recorded
+there (not a fresh `apt-cache` lookup), and hardlinks only those into
+`opt/<pkg>/`. The one new correctness requirement this creates: the
+destination-collision check (ADR-0003) that runs before hardlinking must
+include files *already present* in `opt/<pkg>/` from the original assemble,
+not just collisions among the newly-added members — otherwise a
+newly-unskipped dependency could silently clobber a path an already-bundled
+file occupies. A fresh `install` has no such existing tree, so the same
+collision check degenerates to the old all-new-members case for it; `fix`
+is what makes it a real requirement.
