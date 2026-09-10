@@ -10,3 +10,14 @@ lapt::needs_wrapper() {
   [[ $has_lib == 1 ]] && echo lib
   [[ $has_bin == 1 ]] && echo bin
 }
+
+lapt::write_wrapper() {
+  local script_path=$1 exec_target=$2 lib_dir=$3 bin_dir=$4
+  {
+    echo '#!/bin/sh'
+    [[ -n $lib_dir ]] && printf 'export LD_LIBRARY_PATH="%s:$LD_LIBRARY_PATH"\n' "$lib_dir"
+    [[ -n $bin_dir ]] && printf 'export PATH="%s:$PATH"\n' "$bin_dir"
+    printf 'exec "%s" "$@"\n' "$exec_target"
+  } > "$script_path"
+  chmod +x "$script_path"
+}
