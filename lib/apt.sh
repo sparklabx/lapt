@@ -1,3 +1,28 @@
+lapt::is_system_satisfied() {
+  local group=$1
+  local -a names
+  IFS='|' read -r -a names <<<"$group"
+  local name status installed candidate line
+  for name in "${names[@]}"; do
+    status=$(dpkg -s "$name" 2>/dev/null) || continue
+    installed=""
+    while IFS= read -r line; do
+      case $line in
+        Status:*installed) : ;;
+        Status:*) installed="" ; break ;;
+        Version:\ *) installed=${line#Version: } ;;
+      esac
+    done <<<"$status"
+    [[ -n $installed ]] || continue
+    candidate=$(apt-cache policy "$name" 2>/dev/null | sed -n 's/^  Candidate: //p')
+    [[ -n $candidate ]] || continue
+    dpkg --compare-versions "$installed" ge "$candidate" || continue
+    printf '%s %s\n' "$name" "$installed"
+    return 0
+  done
+  return 1
+}
+
 lapt::_apt_finalize_providers() {
   local owner=$1 virtual=$2; shift 2
   local -a providers=("$@")
