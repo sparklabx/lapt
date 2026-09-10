@@ -70,6 +70,32 @@ gcc-12-base'
   assert_eq "OR-group is the sole, opaque closure member" "$expected" "$actual"
 }
 
+# real `apt-cache depends --recurse ucf` output: the OR-group's terminal
+# alternative is a virtual package `<debconf-2.0>`, whose real providers
+# (cdebconf, debconf) are listed indented right below it. The virtual name
+# itself is not a fetchable package and must be replaced by its providers,
+# not kept alongside them; `debconf` (already the first alternative) dedups
+# against itself appearing again as a provider.
+test_virtual_alternative_replaced_by_its_providers() {
+  local input='ucf
+ |Depends: debconf
+  Depends: <debconf-2.0>
+    cdebconf
+    debconf
+  Depends: sensible-utils
+debconf
+cdebconf
+  Depends: libc6
+sensible-utils
+libc6'
+
+  local expected=$'debconf|cdebconf\nsensible-utils'
+  local actual
+  actual=$(printf '%s\n' "$input" | lapt::resolve_closure)
+  assert_eq "virtual alternative replaced by its real providers, deduped" "$expected" "$actual"
+}
+
 test_linear_closure_excludes_self_and_dedups
 test_or_group_is_opaque_and_not_recursed_into
+test_virtual_alternative_replaced_by_its_providers
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

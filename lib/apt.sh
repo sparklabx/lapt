@@ -1,10 +1,51 @@
+lapt::_apt_finalize_providers() {
+  local owner=$1 virtual=$2; shift 2
+  local -a providers=("$@")
+  local groups=${blockdeps[$owner]}
+  local last=$groups prefix=""
+  if [[ $groups == *$'\n'* ]]; then
+    last=${groups##*$'\n'}
+    prefix=${groups%$'\n'*}
+  fi
+  local -a toks=() newtoks=()
+  IFS='|' read -r -a toks <<<"$last"
+  local t e dup
+  for t in "${toks[@]}"; do
+    [[ $t == "$virtual" ]] && continue
+    newtoks+=("$t")
+  done
+  for t in "${providers[@]}"; do
+    dup=0
+    for e in "${newtoks[@]}"; do [[ $e == "$t" ]] && { dup=1; break; }; done
+    (( dup )) || newtoks+=("$t")
+  done
+  local joined
+  joined=$(IFS='|'; echo "${newtoks[*]}")
+  if [[ -n $prefix ]]; then
+    blockdeps[$owner]="$prefix"$'\n'"$joined"
+  else
+    blockdeps[$owner]="$joined"
+  fi
+}
+
 lapt::resolve_closure() {
   local line cur="" pending=""
   local -A blockdeps=()
   local -a block_order=()
   local top=""
+  local collecting=0 last_owner="" last_virtual=""
+  local -a providers=()
 
   while IFS= read -r line; do
+    if (( collecting )) && [[ $line =~ ^\ \ \ \ ([^[:space:]].*)$ ]]; then
+      providers+=("${BASH_REMATCH[1]}")
+      continue
+    fi
+    if (( collecting )); then
+      lapt::_apt_finalize_providers "$last_owner" "$last_virtual" "${providers[@]}"
+      collecting=0 last_owner="" last_virtual="" providers=()
+    fi
+
     if [[ $line != ' '* ]]; then
       cur=$line
       [[ -z ${blockdeps[$cur]+x} ]] && { blockdeps[$cur]=""; block_order+=("$cur"); }
@@ -25,10 +66,15 @@ lapt::resolve_closure() {
         group=$name
       fi
       blockdeps[$cur]+="${blockdeps[$cur]:+$'\n'}$group"
+      if [[ $name == \<*\> ]]; then
+        collecting=1 last_owner=$cur last_virtual=$name providers=()
+      fi
       continue
     fi
-    # deeper-indented provider lines: not yet handled (later slice)
+    # deeper-indented provider lines not tied to a preceding virtual name:
+    # not yet handled (later slice)
   done
+  (( collecting )) && lapt::_apt_finalize_providers "$last_owner" "$last_virtual" "${providers[@]}"
 
   [[ -z $top ]] && return 0
 
