@@ -13,12 +13,24 @@ ever fetch and cache something the system already provides.
 **Detection, shared by both cases below**: check by package name against
 `dpkg`, not by filesystem probing. `dpkg-query`/`dpkg -s` (read-only — see
 `CONTEXT.md`'s framing, this was never actually prohibited) tells you
-whether that exact package name is installed and at what version;
-`dpkg --compare-versions` checks it against the version constraint the
-closure resolution already carries. Checking for a same-named file under
-`/usr/lib` or `$PATH` was rejected — it can't distinguish the right
-package/version from a same-named unrelated one (e.g. a `pyenv`-installed
-`python3` on `PATH` isn't the apt `python3` package).
+whether that exact package name is installed and at what version.
+Checking for a same-named file under `/usr/lib` or `$PATH` was rejected —
+it can't distinguish the right package/version from a same-named unrelated
+one (e.g. a `pyenv`-installed `python3` on `PATH` isn't the apt `python3`
+package).
+
+**Correction (made while implementing `lib/apt.sh`)**: this ADR originally
+said the installed version gets checked "against the version constraint the
+closure resolution already carries." Verified live against real
+`apt-cache depends --recurse` output for several packages: it never emits a
+version constraint on a `Depends:`/`PreDepends:` line, only bare package
+names — so there is no such constraint for `resolve_closure` to carry.
+`is_system_satisfied` instead compares the installed version against
+`apt-cache policy`'s current *candidate* version for that name
+(`dpkg --compare-versions installed ge candidate`) — a proxy, not a real
+per-edge floor, but one that only errs safe: it can needlessly re-fetch an
+already-fine dependency on a pinned/held-back host, never silently accept
+one too old.
 
 ## Top-level package: notify and skip entirely
 
