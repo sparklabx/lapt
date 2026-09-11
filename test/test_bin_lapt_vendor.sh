@@ -26,7 +26,6 @@ setup_fakes() {
   export FIXTURE_DIR; FIXTURE_DIR=$(mktemp -d)
   mkdir -p "$FIXTURE_DIR"/{closure,dpkg_status,candidate,deb_contents,extract}
   export HOME; HOME=$(mktemp -d)
-  export LAPT_CACHE_ROOT="$HOME/.local/share/lapt/cache"
 
   cat > "$FAKEBIN/apt-cache" <<'EOF'
 #!/usr/bin/env bash
@@ -72,7 +71,7 @@ EOF
 }
 teardown_fakes() {
   rm -rf "$FAKEBIN" "$FIXTURE_DIR" "$HOME"
-  unset FIXTURE_DIR HOME LAPT_CACHE_ROOT
+  unset FIXTURE_DIR HOME
 }
 
 # fixture helper: a library-only package (no closure deps), a lib/ file and a
@@ -128,7 +127,7 @@ test_vendor_happy_path_no_deps() {
   assert_eq "lib hardlinked into target-dir" "lib" "$(cat "$target_dir/lib/libfoo.so.1" 2>/dev/null)"
   assert_eq ".pc prefix rewritten to target-dir" "prefix=$target_dir" "$(sed -n '1p' "$target_dir/lib/pkgconfig/foo.pc" 2>/dev/null)"
   assert_eq ".pc libdir rewritten to target-dir/lib" "libdir=$target_dir/lib" "$(sed -n '2p' "$target_dir/lib/pkgconfig/foo.pc" 2>/dev/null)"
-  if [[ -e "$HOME/.local/share/lapt/opt/foo" ]]; then
+  if [[ -e "$HOME/.lapt/opt/foo" ]]; then
     printf 'FAIL: %s\n  expected no opt/foo, vendor never touches opt/\n' "vendor never writes opt/"
     fail=1
   fi
@@ -152,7 +151,7 @@ test_system_satisfied_closure_member_is_skipped() {
   rc=$?
 
   assert_exit0 "system-satisfied closure member exits 0: $out" "$rc"
-  if [[ -e "$HOME/.local/share/lapt/cache/libbar_2.0" ]]; then
+  if [[ -e "$HOME/.lapt/cache/libbar_2.0" ]]; then
     printf 'FAIL: %s\n  expected libbar never fetched/cached, found a cache entry\n' "system-satisfied member never fetched"
     fail=1
   fi

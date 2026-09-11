@@ -29,7 +29,6 @@ setup_fakes() {
   export FIXTURE_DIR; FIXTURE_DIR=$(mktemp -d)
   mkdir -p "$FIXTURE_DIR"/{closure,dpkg_status,candidate,deb_contents,extract}
   export HOME; HOME=$(mktemp -d)
-  export LAPT_CACHE_ROOT="$HOME/.local/share/lapt/cache"
 
   cat > "$FAKEBIN/apt-cache" <<'EOF'
 #!/usr/bin/env bash
@@ -79,7 +78,7 @@ EOF
 }
 teardown_fakes() {
   rm -rf "$FAKEBIN" "$FIXTURE_DIR" "$HOME"
-  unset FIXTURE_DIR HOME LAPT_CACHE_ROOT FIXTURE_KEY
+  unset FIXTURE_DIR HOME FIXTURE_KEY
 }
 
 # fixture helper: a package with no dependencies (closure output = just its own
@@ -97,7 +96,7 @@ fixture_leaf_pkg() {
 # opt/<pkg> already exists: no-op, exit 0, existing tree untouched
 test_already_installed_is_noop() {
   setup_fakes
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
   mkdir -p "$opt_dir"
   printf 'untouched' > "$opt_dir/marker"
 
@@ -124,7 +123,7 @@ test_system_installed_is_noop() {
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
   rc=$?
   assert_exit0 "system-installed no-op exits 0" "$rc"
-  if [[ -e "$HOME/.local/share/lapt/opt/foo" ]]; then
+  if [[ -e "$HOME/.lapt/opt/foo" ]]; then
     printf 'FAIL: %s\n  expected no opt/foo, found one\n' "system-installed creates nothing"
     fail=1
   fi
@@ -154,7 +153,7 @@ test_no_top_level_bin_aborts() {
     printf 'FAIL: %s\n  expected nonzero exit, got 0\n' "no-bin aborts"
     fail=1
   fi
-  if [[ -e "$HOME/.local/share/lapt/opt/foo" ]]; then
+  if [[ -e "$HOME/.lapt/opt/foo" ]]; then
     printf 'FAIL: %s\n  expected no opt/foo left behind, found one\n' "no-bin leaves nothing"
     fail=1
   fi
@@ -175,14 +174,14 @@ test_install_happy_path_no_deps() {
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
   rc=$?
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
 
   assert_exit0 "happy path exits 0" "$rc"
   assert_eq "binary hardlinked into opt/" "real" "$(cat "$opt_dir/bin/foo" 2>/dev/null)"
   assert_eq "no wrapper generated" "" "$(find "$opt_dir" -name '*.wrap' 2>/dev/null)"
   assert_eq "version recorded" "version=1.0" "$(sed -n '1p' "$opt_dir/.lapt/version" 2>/dev/null)"
   assert_eq "exposure list records bin/foo as exposed" "bin/foo" "$(cat "$opt_dir/.lapt/exposed" 2>/dev/null)"
-  assert_eq "symlink exposed into ~/.local/bin" "$opt_dir/bin/foo" "$(readlink -f "$HOME/.local/bin/foo" 2>/dev/null)"
+  assert_eq "symlink exposed into LAPT_HOME/bin" "$opt_dir/bin/foo" "$(readlink -f "$HOME/.lapt/bin/foo" 2>/dev/null)"
 
   teardown_fakes
 }
@@ -199,10 +198,10 @@ test_system_satisfied_dep_is_skipped() {
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
   rc=$?
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
 
   assert_exit0 "system-satisfied dep install exits 0" "$rc"
-  if [[ -e "$HOME/.local/share/lapt/cache/libbar_2.0" ]]; then
+  if [[ -e "$HOME/.lapt/cache/libbar_2.0" ]]; then
     printf 'FAIL: %s\n  expected libbar never fetched/cached, found a cache entry\n' "system-satisfied dep is never fetched"
     fail=1
   fi
@@ -229,7 +228,7 @@ test_unsatisfied_dep_is_fetched_and_bundled() {
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
   rc=$?
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
 
   assert_exit0 "unsatisfied dep install exits 0: $out" "$rc"
   assert_eq "dep content bundled and flattened" "data" "$(cat "$opt_dir/share/databar/data.txt" 2>/dev/null)"
@@ -254,14 +253,14 @@ test_lib_dep_triggers_wrapper() {
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
   rc=$?
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
 
   assert_exit0 "wrapper-needed install exits 0: $out" "$rc"
   assert_eq "real binary moved aside" "real" "$(cat "$opt_dir/bin/foo.real" 2>/dev/null)"
   assert_eq "wrapper written at the exposed path" \
     "$(printf '#!/bin/sh\nexport LD_LIBRARY_PATH="%s:$LD_LIBRARY_PATH"\nexec "%s" "$@"' "$opt_dir/lib" "$opt_dir/bin/foo.real")" \
     "$(cat "$opt_dir/bin/foo" 2>/dev/null)"
-  assert_eq "exposed symlink resolves through the wrapper" "$opt_dir/bin/foo" "$(readlink -f "$HOME/.local/bin/foo" 2>/dev/null)"
+  assert_eq "exposed symlink resolves through the wrapper" "$opt_dir/bin/foo" "$(readlink -f "$HOME/.lapt/bin/foo" 2>/dev/null)"
 
   teardown_fakes
 }
@@ -283,14 +282,14 @@ test_foreign_bin_dep_triggers_wrapper() {
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
   rc=$?
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
 
   assert_exit0 "foreign-bin install exits 0: $out" "$rc"
   assert_eq "dependency's own binary bundled, not exposed" "helper" "$(cat "$opt_dir/bin/helper" 2>/dev/null)"
   assert_eq "wrapper prepends PATH, not LD_LIBRARY_PATH" \
     "$(printf '#!/bin/sh\nexport PATH="%s:$PATH"\nexec "%s" "$@"' "$opt_dir/bin" "$opt_dir/bin/foo.real")" \
     "$(cat "$opt_dir/bin/foo" 2>/dev/null)"
-  if [[ -e "$HOME/.local/bin/helper" ]]; then
+  if [[ -e "$HOME/.lapt/bin/helper" ]]; then
     printf 'FAIL: %s\n  expected dependency binary never exposed, found a symlink\n' "dependency binary stays unexposed"
     fail=1
   fi
@@ -320,11 +319,11 @@ test_partial_failure_leaves_no_opt_dir() {
     printf 'FAIL: %s\n  expected nonzero exit, got 0\n' "collision aborts"
     fail=1
   fi
-  if [[ -e "$HOME/.local/share/lapt/opt/foo" ]]; then
+  if [[ -e "$HOME/.lapt/opt/foo" ]]; then
     printf 'FAIL: %s\n  expected no opt/foo left behind, found one\n' "partial failure leaves no opt dir"
     fail=1
   fi
-  if compgen -G "$HOME/.local/share/lapt/opt/.tmp.*" >/dev/null 2>&1; then
+  if compgen -G "$HOME/.lapt/opt/.tmp.*" >/dev/null 2>&1; then
     printf 'FAIL: %s\n  expected no leftover scratch dir\n' "partial failure leaves no scratch dir"
     fail=1
   fi
@@ -340,13 +339,13 @@ test_partial_failure_leaves_no_opt_dir() {
 test_exposure_collision_after_mv_keeps_opt_dir() {
   setup_fakes
   fixture_leaf_pkg foo 1.0
-  mkdir -p "$HOME/.local/bin"
-  : > "$HOME/.local/bin/foo"
+  mkdir -p "$HOME/.lapt/bin"
+  : > "$HOME/.lapt/bin/foo"
 
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
   rc=$?
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
 
   assert_exit0 "exposure collision does not fail the install" "$rc"
   assert_eq "package content still installed" "real" "$(cat "$opt_dir/bin/foo" 2>/dev/null)"

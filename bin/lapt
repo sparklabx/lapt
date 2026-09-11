@@ -10,7 +10,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 lapt::die() { echo "lapt: $*" >&2; exit 1; }
 
-LAPT_OPT_ROOT=${LAPT_OPT_ROOT:-$HOME/.local/share/lapt/opt}
+LAPT_HOME="$HOME/.lapt"
+LAPT_OPT_ROOT="$LAPT_HOME/opt"
 
 cmd_install() {
   local pkg=$1
@@ -70,7 +71,6 @@ cmd_install() {
   manifest=$(lapt::bundle_manifest "$work_dir" "${specs[@]}") || { rm -rf "$work_dir"; lapt::die "bundle failed for $pkg"; }
   lapt::bundle_apply "$work_dir" 0 <<<"$manifest"
 
-  local dest_home="$HOME/.local"
   local wrapper_kind; wrapper_kind=$(printf '%s\n' "$manifest" | lapt::needs_wrapper "$pkg")
   if [[ -n $wrapper_kind ]]; then
     local lib_dir="" bin_dir=""
@@ -91,7 +91,7 @@ cmd_install() {
   # need to bake in a not-yet-existing target, and a collision here doesn't
   # need to unwind the install: opt_dir is already a complete, valid,
   # removable package, just not fully exposed to $PATH/man yet.
-  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$dest_home" "$pkg" > "$opt_dir/.lapt/exposed" \
+  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$LAPT_HOME" "$pkg" > "$opt_dir/.lapt/exposed" \
     || echo "lapt: $pkg installed at $opt_dir, but some files could not be exposed (see warnings above) -- run 'lapt expose $pkg' to retry"
   return 0
 }
@@ -111,7 +111,7 @@ cmd_expose() {
   manifest=$(lapt::bundle_manifest "$(mktemp -u -d)" "$pkg"$'\t'"$version"$'\t'"$pkg") \
     || lapt::die "failed to compute what to expose for $pkg"
 
-  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$HOME/.local" "$pkg" > "$opt_dir/.lapt/exposed" \
+  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$LAPT_HOME" "$pkg" > "$opt_dir/.lapt/exposed" \
     || echo "lapt: $pkg still has files that could not be exposed (see warnings above) -- fix the collisions and run 'lapt expose $pkg' again"
   return 0
 }
@@ -121,7 +121,7 @@ cmd_remove() {
   local opt_dir="$LAPT_OPT_ROOT/$pkg"
   [[ -f "$opt_dir/.lapt/version" ]] || lapt::die "$pkg is not installed"
 
-  lapt::expose_remove "$opt_dir" "$HOME/.local" < "$opt_dir/.lapt/exposed"
+  lapt::expose_remove "$opt_dir" "$LAPT_HOME" < "$opt_dir/.lapt/exposed"
   rm -rf "$opt_dir"
   echo "lapt: removed $pkg"
   return 0
@@ -271,7 +271,7 @@ cmd_vendor() {
 }
 
 cmd_prune() {
-  local cache_root="${LAPT_CACHE_ROOT:-$HOME/.local/share/lapt/cache}"
+  local cache_root="$LAPT_HOME/cache"
   local entry_dir
   for entry_dir in "$cache_root"/*/; do
     [[ -d $entry_dir ]] || continue
@@ -279,6 +279,28 @@ cmd_prune() {
     rm -rf "$entry_dir"
     echo "lapt: pruned $(basename "$entry_dir")"
   done
+  return 0
+}
+
+cmd_init() {
+  mkdir -p "$LAPT_HOME"
+  cat > "$LAPT_HOME/env" <<'EOF'
+# source this to put lapt on PATH/MANPATH: . env
+_lapt_pathadd() {
+  local -n __lapt_var=$2
+  case ":$__lapt_var:" in
+    *":$1:"*) ;;
+    *) __lapt_var="$1:$__lapt_var${3:-}" ;;
+  esac
+  export "$2"
+}
+_lapt_pathadd "$HOME/.lapt/bin" PATH
+_lapt_pathadd "$HOME/.lapt/share/man" MANPATH ":"
+unset -f _lapt_pathadd
+EOF
+
+  echo "lapt: wrote $LAPT_HOME/env -- add this line to your ~/.bashrc:"
+  echo '  . "$HOME/.lapt/env"'
   return 0
 }
 
@@ -290,5 +312,6 @@ case "${1:-}" in
   fix) shift; cmd_fix "$@" ;;
   vendor) shift; cmd_vendor "$@" ;;
   prune) shift; cmd_prune "$@" ;;
+  init) shift; cmd_init "$@" ;;
   *) lapt::die "unknown subcommand: ${1:-}" ;;
 esac

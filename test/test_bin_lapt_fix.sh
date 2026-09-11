@@ -28,7 +28,6 @@ setup_fakes() {
   export FIXTURE_DIR; FIXTURE_DIR=$(mktemp -d)
   mkdir -p "$FIXTURE_DIR"/{dpkg_status,deb_contents,extract}
   export HOME; HOME=$(mktemp -d)
-  export LAPT_CACHE_ROOT="$HOME/.local/share/lapt/cache"
 
   cat > "$FAKEBIN/dpkg" <<'EOF'
 #!/usr/bin/env bash
@@ -61,7 +60,7 @@ EOF
 }
 teardown_fakes() {
   rm -rf "$FAKEBIN" "$FIXTURE_DIR" "$HOME"
-  unset FIXTURE_DIR HOME LAPT_CACHE_ROOT
+  unset FIXTURE_DIR HOME
 }
 
 test_fix_on_uninstalled_pkg_errors() {
@@ -86,13 +85,13 @@ test_fix_on_uninstalled_pkg_errors() {
 # uses, to tell pkg's own bin/ files apart from a dependency's.
 fixture_installed_pkg() {
   local pkg=$1 version=$2 system_deps=$3
-  local opt_dir="$HOME/.local/share/lapt/opt/$pkg"
+  local opt_dir="$HOME/.lapt/opt/$pkg"
   mkdir -p "$opt_dir/bin" "$opt_dir/.lapt"
   printf 'real' > "$opt_dir/bin/$pkg"
   printf 'version=%s\ninstalled=2024-01-01T00:00:00Z\n' "$version" > "$opt_dir/.lapt/version"
   printf '%s' "$system_deps" > "$opt_dir/.lapt/system-deps"
 
-  local cache_dir="$HOME/.local/share/lapt/cache/${pkg}_${version}"
+  local cache_dir="$HOME/.lapt/cache/${pkg}_${version}"
   mkdir -p "$cache_dir/usr/bin"
   printf 'real' > "$cache_dir/usr/bin/$pkg"
 }
@@ -101,7 +100,7 @@ test_fix_all_deps_still_satisfied_is_noop() {
   setup_fakes
   fixture_installed_pkg foo 1.0 "libbar 2.0"$'\n'
   printf '%s' "2.0" > "$FIXTURE_DIR/dpkg_status/libbar"
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
 
   local rc
   PATH="$FAKEBIN:$PATH" "$LAPT" fix foo >/dev/null 2>&1
@@ -109,7 +108,7 @@ test_fix_all_deps_still_satisfied_is_noop() {
 
   assert_exit0 "fix with nothing stale exits 0" "$rc"
   assert_eq "system-deps unchanged" "libbar 2.0" "$(cat "$opt_dir/.lapt/system-deps")"
-  if [[ -e "$HOME/.local/share/lapt/cache/libbar_2.0" ]]; then
+  if [[ -e "$HOME/.lapt/cache/libbar_2.0" ]]; then
     printf 'FAIL: %s\n  expected libbar never fetched, found a cache entry\n' "still-satisfied dep is never fetched"
     fail=1
   fi
@@ -125,7 +124,7 @@ test_fix_all_deps_still_satisfied_is_noop() {
 test_fix_stale_dep_is_fetched_and_bundled() {
   setup_fakes
   fixture_installed_pkg foo 1.0 "libbar 2.0"$'\n'
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
   printf -- '-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/lib/libbar.so.1\n' \
     > "$FIXTURE_DIR/deb_contents/libbar_2.0"
   mkdir -p "$FIXTURE_DIR/extract/libbar_2.0/usr/lib"
@@ -146,7 +145,7 @@ test_fix_mixed_only_stale_one_is_fetched() {
   setup_fakes
   fixture_installed_pkg foo 1.0 "libbar 2.0"$'\n'"databar 3.0"$'\n'
   printf '%s' "3.0" > "$FIXTURE_DIR/dpkg_status/databar"
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
   printf -- '-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/lib/libbar.so.1\n' \
     > "$FIXTURE_DIR/deb_contents/libbar_2.0"
   mkdir -p "$FIXTURE_DIR/extract/libbar_2.0/usr/lib"
@@ -159,7 +158,7 @@ test_fix_mixed_only_stale_one_is_fetched() {
   assert_exit0 "mixed fix exits 0: $out" "$rc"
   assert_eq "stale dep bundled" "lib" "$(cat "$opt_dir/lib/libbar.so.1" 2>/dev/null)"
   assert_eq "still-satisfied dep survives in system-deps" "databar 3.0" "$(cat "$opt_dir/.lapt/system-deps")"
-  if [[ -e "$HOME/.local/share/lapt/cache/databar_3.0" ]]; then
+  if [[ -e "$HOME/.lapt/cache/databar_3.0" ]]; then
     printf 'FAIL: %s\n  expected still-satisfied databar never fetched, found a cache entry\n' "still-satisfied dep is never fetched"
     fail=1
   fi
@@ -175,7 +174,7 @@ test_fix_mixed_only_stale_one_is_fetched() {
 test_fix_stale_dep_collision_aborts() {
   setup_fakes
   fixture_installed_pkg foo 1.0 "clash 9.0"$'\n'
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
   printf -- '-rwxr-xr-x root/root 4 2024-01-01 00:00 ./usr/bin/foo\n' \
     > "$FIXTURE_DIR/deb_contents/clash_9.0"
   mkdir -p "$FIXTURE_DIR/extract/clash_9.0/usr/bin"
@@ -202,7 +201,7 @@ test_fix_stale_dep_collision_aborts() {
 test_fix_newly_triggers_wrapper() {
   setup_fakes
   fixture_installed_pkg foo 1.0 "libbar 2.0"$'\n'
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
   printf -- '-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/lib/libbar.so.1\n' \
     > "$FIXTURE_DIR/deb_contents/libbar_2.0"
   mkdir -p "$FIXTURE_DIR/extract/libbar_2.0/usr/lib"
@@ -231,7 +230,7 @@ test_fix_newly_triggers_wrapper() {
 test_fix_does_not_retouch_existing_wrapper() {
   setup_fakes
   fixture_installed_pkg foo 1.0 "databar 3.0"$'\n'
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
   mkdir -p "$opt_dir/lib"
   printf 'lib' > "$opt_dir/lib/libbar.so.1"
   mv "$opt_dir/bin/foo" "$opt_dir/bin/foo.real"

@@ -20,7 +20,7 @@ assert_eq() {
 FAKEBIN=""
 setup_fakes() {
   FAKEBIN=$(mktemp -d)
-  export LAPT_CACHE_ROOT; LAPT_CACHE_ROOT=$(mktemp -d)
+  export LAPT_HOME; LAPT_HOME=$(mktemp -d)
   export FIXTURE_DIR; FIXTURE_DIR=$(mktemp -d)
   mkdir -p "$FIXTURE_DIR/deb_contents" "$FIXTURE_DIR/extract"
 
@@ -49,8 +49,8 @@ EOF
   chmod +x "$FAKEBIN/apt-get" "$FAKEBIN/dpkg-deb" "$FAKEBIN/dpkg"
 }
 teardown_fakes() {
-  rm -rf "$FAKEBIN" "$LAPT_CACHE_ROOT" "$FIXTURE_DIR"
-  unset LAPT_CACHE_ROOT FIXTURE_DIR FIXTURE_KEY
+  rm -rf "$FAKEBIN" "$LAPT_HOME" "$FIXTURE_DIR"
+  unset LAPT_HOME FIXTURE_DIR FIXTURE_KEY
 }
 
 # entry already cached: no-op, existing content untouched, no external tools invoked

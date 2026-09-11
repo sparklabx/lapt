@@ -30,7 +30,7 @@ test_prune_on_empty_cache_is_silent() {
 
 test_prune_removes_unreferenced_entry() {
   export HOME; HOME=$(mktemp -d)
-  local cache_dir="$HOME/.local/share/lapt/cache/curl_8.5.0"
+  local cache_dir="$HOME/.lapt/cache/curl_8.5.0"
   mkdir -p "$cache_dir/usr/bin"
   : > "$cache_dir/usr/bin/curl"
 
@@ -45,8 +45,8 @@ test_prune_removes_unreferenced_entry() {
 
 test_prune_keeps_referenced_entry() {
   export HOME; HOME=$(mktemp -d)
-  local cache_dir="$HOME/.local/share/lapt/cache/curl_8.5.0"
-  local opt_dir="$HOME/.local/share/lapt/opt/curl/bin"
+  local cache_dir="$HOME/.lapt/cache/curl_8.5.0"
+  local opt_dir="$HOME/.lapt/opt/curl/bin"
   mkdir -p "$cache_dir/usr/bin" "$opt_dir"
   : > "$cache_dir/usr/bin/curl"
   ln "$cache_dir/usr/bin/curl" "$opt_dir/curl"
@@ -62,9 +62,9 @@ test_prune_keeps_referenced_entry() {
 
 test_prune_mixed_only_unreferenced_removed() {
   export HOME; HOME=$(mktemp -d)
-  local ref_dir="$HOME/.local/share/lapt/cache/curl_8.5.0"
-  local unref_dir="$HOME/.local/share/lapt/cache/libfoo_1.2.3"
-  local opt_dir="$HOME/.local/share/lapt/opt/curl/bin"
+  local ref_dir="$HOME/.lapt/cache/curl_8.5.0"
+  local unref_dir="$HOME/.lapt/cache/libfoo_1.2.3"
+  local opt_dir="$HOME/.lapt/opt/curl/bin"
   mkdir -p "$ref_dir/usr/bin" "$unref_dir/usr/lib" "$opt_dir"
   : > "$ref_dir/usr/bin/curl"
   ln "$ref_dir/usr/bin/curl" "$opt_dir/curl"

@@ -30,7 +30,7 @@ test_list_on_empty_opt_is_silent() {
 
 test_list_prints_name_and_version_per_pkg() {
   export HOME; HOME=$(mktemp -d)
-  local opt_root="$HOME/.local/share/lapt/opt"
+  local opt_root="$HOME/.lapt/opt"
   mkdir -p "$opt_root/curl/.lapt" "$opt_root/ripgrep/.lapt"
   printf 'version=8.5.0\ninstalled=2024-01-01T00:00:00Z\n' > "$opt_root/curl/.lapt/version"
   printf 'version=14.1.0\ninstalled=2024-01-02T00:00:00Z\n' > "$opt_root/ripgrep/.lapt/version"
@@ -46,7 +46,7 @@ ripgrep 14.1.0" "$out"
 
 test_list_strips_debian_point_release_suffix() {
   export HOME; HOME=$(mktemp -d)
-  local opt_root="$HOME/.local/share/lapt/opt"
+  local opt_root="$HOME/.lapt/opt"
   mkdir -p "$opt_root/curl/.lapt"
   printf 'version=8.5.0-2+deb12u1\ninstalled=2024-01-01T00:00:00Z\n' > "$opt_root/curl/.lapt/version"
 
@@ -62,7 +62,7 @@ test_list_skips_incomplete_opt_dirs() {
   # a .tmp.XXXXXX scratch dir from an in-flight install, or any opt/<pkg> with
   # no .lapt/version yet, isn't an installed package -- don't list it
   export HOME; HOME=$(mktemp -d)
-  local opt_root="$HOME/.local/share/lapt/opt"
+  local opt_root="$HOME/.lapt/opt"
   mkdir -p "$opt_root/.tmp.abc123"
 
   local out

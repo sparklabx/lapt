@@ -27,7 +27,6 @@ setup_fakes() {
   export FIXTURE_DIR; FIXTURE_DIR=$(mktemp -d)
   mkdir -p "$FIXTURE_DIR"/{closure,dpkg_status,candidate,deb_contents,extract}
   export HOME; HOME=$(mktemp -d)
-  export LAPT_CACHE_ROOT="$HOME/.local/share/lapt/cache"
 
   cat > "$FAKEBIN/apt-cache" <<'EOF'
 #!/usr/bin/env bash
@@ -76,7 +75,7 @@ EOF
 }
 teardown_fakes() {
   rm -rf "$FAKEBIN" "$FIXTURE_DIR" "$HOME"
-  unset FIXTURE_DIR HOME LAPT_CACHE_ROOT FIXTURE_KEY
+  unset FIXTURE_DIR HOME FIXTURE_KEY
 }
 
 fixture_leaf_pkg() {
@@ -110,21 +109,21 @@ test_expose_on_uninstalled_pkg_errors() {
 test_expose_retries_after_user_clears_collision() {
   setup_fakes
   fixture_leaf_pkg foo 1.0
-  mkdir -p "$HOME/.local/bin"
-  : > "$HOME/.local/bin/foo"
+  mkdir -p "$HOME/.lapt/bin"
+  : > "$HOME/.lapt/bin/foo"
 
   PATH="$FAKEBIN:$PATH" "$LAPT" install foo >/dev/null 2>&1
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
   assert_eq "not yet exposed (collision, nothing recorded)" "" "$(cat "$opt_dir/.lapt/exposed" 2>/dev/null)"
 
-  rm -f "$HOME/.local/bin/foo"
+  rm -f "$HOME/.lapt/bin/foo"
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" expose foo 2>&1)
   rc=$?
 
   assert_exit0 "expose retry exits 0" "$rc"
   assert_eq "now exposed" "bin/foo" "$(cat "$opt_dir/.lapt/exposed" 2>/dev/null)"
-  assert_eq "symlink now created" "$opt_dir/bin/foo" "$(readlink -f "$HOME/.local/bin/foo" 2>/dev/null)"
+  assert_eq "symlink now created" "$opt_dir/bin/foo" "$(readlink -f "$HOME/.lapt/bin/foo" 2>/dev/null)"
 
   teardown_fakes
 }
@@ -134,7 +133,7 @@ test_expose_on_already_exposed_pkg_is_noop() {
   setup_fakes
   fixture_leaf_pkg foo 1.0
   PATH="$FAKEBIN:$PATH" "$LAPT" install foo >/dev/null 2>&1
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
 
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" expose foo 2>&1)
@@ -142,7 +141,7 @@ test_expose_on_already_exposed_pkg_is_noop() {
 
   assert_exit0 "re-expose already-good pkg exits 0" "$rc"
   assert_eq "still exposed" "bin/foo" "$(cat "$opt_dir/.lapt/exposed" 2>/dev/null)"
-  assert_eq "symlink unchanged" "$opt_dir/bin/foo" "$(readlink -f "$HOME/.local/bin/foo" 2>/dev/null)"
+  assert_eq "symlink unchanged" "$opt_dir/bin/foo" "$(readlink -f "$HOME/.lapt/bin/foo" 2>/dev/null)"
 
   teardown_fakes
 }

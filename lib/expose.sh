@@ -1,13 +1,13 @@
 lapt::expose_add() {
-  local opt_dir=$1 dest_home=$2 pkg=$3
+  local opt_dir=$1 lapt_home=$2 pkg=$3
   local rel src origin dest miss=0
   while IFS=$'\t' read -r rel src origin; do
     [[ $origin == "$pkg" ]] || continue
     case $rel in
-      bin/*|share/man/*|share/bash-completion/completions/*|share/applications/*|share/icons/*|share/mime/*) ;;
+      bin/*|share/man/*) ;;
       *) continue ;;
     esac
-    dest="$dest_home/$rel"
+    dest="$lapt_home/$rel"
     if [[ -L $dest && $(readlink -f "$dest") == "$opt_dir/$rel" ]]; then
       echo "$rel"
       continue
@@ -24,10 +24,10 @@ lapt::expose_add() {
 }
 
 lapt::expose_remove() {
-  local opt_dir=$1 dest_home=$2
+  local opt_dir=$1 lapt_home=$2
   local rel dest
   while IFS= read -r rel; do
-    dest="$dest_home/$rel"
+    dest="$lapt_home/$rel"
     [[ -L $dest ]] || continue
     [[ $(readlink -f "$dest") == "$opt_dir/$rel" ]] || continue
     rm -f "$dest"

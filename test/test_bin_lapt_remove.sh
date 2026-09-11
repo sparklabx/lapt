@@ -23,10 +23,10 @@ assert_exit0() {
 HOME_DIR=""
 setup_fixture() {
   export HOME; HOME=$(mktemp -d)
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
-  mkdir -p "$opt_dir/bin" "$opt_dir/.lapt" "$HOME/.local/bin"
+  local opt_dir="$HOME/.lapt/opt/foo"
+  mkdir -p "$opt_dir/bin" "$opt_dir/.lapt" "$HOME/.lapt/bin"
   : > "$opt_dir/bin/foo"
-  ln -s "$opt_dir/bin/foo" "$HOME/.local/bin/foo"
+  ln -s "$opt_dir/bin/foo" "$HOME/.lapt/bin/foo"
   printf 'version=1.0\ninstalled=2024-01-01T00:00:00Z\n' > "$opt_dir/.lapt/version"
   printf 'bin/foo\n' > "$opt_dir/.lapt/exposed"
 }
@@ -51,7 +51,7 @@ test_remove_on_uninstalled_pkg_errors() {
 
 test_remove_deletes_opt_dir_and_unlinks_exposed_files() {
   setup_fixture
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+  local opt_dir="$HOME/.lapt/opt/foo"
 
   local out rc
   out=$("$LAPT" remove foo 2>&1)
@@ -62,7 +62,7 @@ test_remove_deletes_opt_dir_and_unlinks_exposed_files() {
     printf 'FAIL: %s\n  opt_dir still exists: %s\n' "opt_dir removed" "$opt_dir"
     fail=1
   fi
-  if [[ -e "$HOME/.local/bin/foo" || -L "$HOME/.local/bin/foo" ]]; then
+  if [[ -e "$HOME/.lapt/bin/foo" || -L "$HOME/.lapt/bin/foo" ]]; then
     printf 'FAIL: %s\n  exposed symlink still exists\n' "exposed symlink removed"
     fail=1
   fi
@@ -75,15 +75,15 @@ test_remove_deletes_opt_dir_and_unlinks_exposed_files() {
 # provides, exercised here through cmd_remove
 test_remove_does_not_touch_reclaimed_symlink() {
   setup_fixture
-  local opt_dir="$HOME/.local/share/lapt/opt/foo"
-  local other_dir="$HOME/.local/share/lapt/opt/other"
+  local opt_dir="$HOME/.lapt/opt/foo"
+  local other_dir="$HOME/.lapt/opt/other"
   mkdir -p "$other_dir/bin"; : > "$other_dir/bin/foo"
-  rm -f "$HOME/.local/bin/foo"
-  ln -s "$other_dir/bin/foo" "$HOME/.local/bin/foo"
+  rm -f "$HOME/.lapt/bin/foo"
+  ln -s "$other_dir/bin/foo" "$HOME/.lapt/bin/foo"
 
   "$LAPT" remove foo >/dev/null 2>&1
 
-  assert_eq "reclaimed symlink left alone" "$other_dir/bin/foo" "$(readlink -f "$HOME/.local/bin/foo" 2>/dev/null)"
+  assert_eq "reclaimed symlink left alone" "$other_dir/bin/foo" "$(readlink -f "$HOME/.lapt/bin/foo" 2>/dev/null)"
 
   teardown_fixture
 }

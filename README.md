@@ -1,6 +1,6 @@
 # lapt
 
-lapt installs Debian/Ubuntu packages under `$HOME/.local` — no sudo, no writes
+lapt installs Debian/Ubuntu packages under `$LAPT_HOME` — no sudo, no writes
 to the system package database — for when you're on a shared or managed
 machine without root but still want a real `.deb` package instead of building
 from source. Under the hood it's a thin wrapper around `apt-get download` +
@@ -24,7 +24,7 @@ from source. Under the hood it's a thin wrapper around `apt-get download` +
 ## Requirements
 
 - Debian or Ubuntu (or a derivative) with `apt`/`dpkg` available
-- bash 4+
+- bash 4.3+
 - No sudo/root required
 
 ## Install
@@ -45,6 +45,18 @@ way:
 tar xzf lapt-<version>.tar.gz
 ln -s "$PWD/lapt/bin/lapt" "$HOME/.local/bin/lapt"
 ```
+
+Then run `lapt init` once and add the printed line to your `~/.bashrc`, so
+installed packages' binaries and man pages are reachable:
+
+```
+$ lapt init
+lapt: wrote /home/you/.lapt/env -- add this line to your ~/.bashrc:
+  . "$HOME/.lapt/env"
+```
+
+Everything lapt owns — installed packages, cache, `env` — lives under
+`$LAPT_HOME` (`$HOME/.lapt`).
 
 ## Quickstart
 
@@ -69,7 +81,9 @@ curl 8.4.0
 - `lapt prune` — reclaim cache entries no longer referenced by any installed
   or vendored package.
 - `lapt expose <pkg>` — (re-)symlink an installed package's own binaries/man
-  pages/etc. into `$HOME/.local`'s standard directories.
+  pages into `$LAPT_HOME`.
+- `lapt init` — write (or regenerate) `$LAPT_HOME/env`, which puts
+  `$LAPT_HOME/bin` on `PATH` and `$LAPT_HOME/share/man` on `MANPATH`.
 
 See [`CONTEXT.md`](CONTEXT.md) for the full domain model (closures, exposure,
 vendoring, etc.) and [`docs/adr/`](docs/adr/) for the design decisions behind
