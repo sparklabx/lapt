@@ -213,6 +213,53 @@ cmd_fix() {
   return 0
 }
 
+cmd_vendor() {
+  local target_dir=$1; shift
+  (( $# > 0 )) || lapt::die "usage: lapt vendor <target-dir> <pkg...>"
+
+  local -a specs=() vendored=()
+  local -A added=()
+  local pkg group closure pick name dep_version version
+
+  for pkg in "$@"; do
+    if dpkg -s "$pkg" >/dev/null 2>&1; then
+      echo "lapt: $pkg is already installed via the system package manager"
+      continue
+    fi
+    [[ -n ${added[$pkg]+x} ]] && continue
+
+    version=$(apt-cache policy "$pkg" | sed -n 's/^  Candidate: //p')
+    [[ -n $version ]] || lapt::die "no apt candidate found for $pkg"
+    lapt::cache_ensure "$pkg" "$version" || lapt::die "failed to fetch $pkg=$version"
+    specs+=("$pkg:$version:$pkg")
+    added[$pkg]=1
+    vendored+=("$pkg")
+
+    closure=$(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts \
+      --no-breaks --no-replaces --no-enhances "$pkg" | lapt::resolve_closure)
+
+    while IFS= read -r group; do
+      [[ -z $group ]] && continue
+      lapt::is_system_satisfied "$group" >/dev/null && continue
+      pick=$(lapt::pick_candidate "$group") || lapt::die "no apt candidate for $group"
+      read -r name dep_version <<<"$pick"
+      [[ -n ${added[$name]+x} ]] && continue
+      lapt::cache_ensure "$name" "$dep_version" || lapt::die "failed to fetch $name=$dep_version"
+      specs+=("$name:$dep_version:$name")
+      added[$name]=1
+    done <<<"$closure"
+  done
+
+  (( ${#specs[@]} > 0 )) || return 0
+
+  mkdir -p "$target_dir"
+  local manifest
+  manifest=$(lapt::bundle_manifest "$target_dir" "${specs[@]}") || lapt::die "vendor bundle failed"
+  lapt::bundle_apply "$target_dir" 1 <<<"$manifest"
+  echo "lapt: vendored ${vendored[*]} into $target_dir"
+  return 0
+}
+
 cmd_prune() {
   local cache_root="${LAPT_CACHE_ROOT:-$HOME/.local/share/lapt/cache}"
   local entry_dir
@@ -231,6 +278,7 @@ case "${1:-}" in
   remove) shift; cmd_remove "$@" ;;
   list) shift; cmd_list "$@" ;;
   fix) shift; cmd_fix "$@" ;;
+  vendor) shift; cmd_vendor "$@" ;;
   prune) shift; cmd_prune "$@" ;;
   *) lapt::die "unknown subcommand: ${1:-}" ;;
 esac
