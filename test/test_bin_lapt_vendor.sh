@@ -209,6 +209,33 @@ test_shared_closure_member_across_named_pkgs_is_deduped() {
   teardown_fakes
 }
 
+# a .pc file whose Libs:/Cflags: hardcodes an absolute path instead of using
+# ${libdir}/${includedir} (real quirk in Debian's ncurses.pc) is rewritten too
+# -- not just the prefix=/libdir=/includedir= assignment lines
+test_pc_with_hardcoded_path_is_rewritten() {
+  setup_fakes
+  printf '%s\n' "foo" > "$FIXTURE_DIR/closure/foo"
+  printf '%s' "1.0" > "$FIXTURE_DIR/candidate/foo"
+  printf -- '-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/lib/pkgconfig/foo.pc\n' \
+    > "$FIXTURE_DIR/deb_contents/foo_1.0"
+  mkdir -p "$FIXTURE_DIR/extract/foo_1.0/usr/lib/pkgconfig"
+  printf 'prefix=/usr\nlibdir=${prefix}/lib\nincludedir=${prefix}/include\n\nName: foo\nLibs: -L/usr/lib/x86_64-linux-gnu -lfoo\nCflags: -I/usr/include\n' \
+    > "$FIXTURE_DIR/extract/foo_1.0/usr/lib/pkgconfig/foo.pc"
+  local target_dir="$HOME/vendor"
+
+  local out rc
+  out=$(PATH="$FAKEBIN:$PATH" "$LAPT" vendor "$target_dir" foo 2>&1)
+  rc=$?
+
+  assert_exit0 "hardcoded-path pc still succeeds: $out" "$rc"
+  assert_eq "Libs: hardcoded -L rewritten to target-dir/lib" "Libs: -L$target_dir/lib -lfoo" \
+    "$(sed -n '/^Libs:/p' "$target_dir/lib/pkgconfig/foo.pc" 2>/dev/null)"
+  assert_eq "Cflags: hardcoded -I rewritten to target-dir/include" "Cflags: -I$target_dir/include" \
+    "$(sed -n '/^Cflags:/p' "$target_dir/lib/pkgconfig/foo.pc" 2>/dev/null)"
+
+  teardown_fakes
+}
+
 # no packages named: usage error, nonzero exit
 test_no_pkgs_named_errors() {
   setup_fakes
@@ -227,5 +254,6 @@ test_vendor_happy_path_no_deps
 test_system_satisfied_closure_member_is_skipped
 test_unsatisfied_closure_member_is_bundled
 test_shared_closure_member_across_named_pkgs_is_deduped
+test_pc_with_hardcoded_path_is_rewritten
 test_no_pkgs_named_errors
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

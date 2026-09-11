@@ -40,9 +40,16 @@ lapt::bundle_apply() {
     dest="$dest_dir/$rel"
     mkdir -p "$(dirname "$dest")"
     if [[ $rewrite_pc == 1 && $rel == *.pc ]]; then
-      sed -e "s|^prefix=.*|prefix=$dest_dir|" \
+      # Most .pc files reference ${libdir}/${includedir} in Libs:/Cflags: and
+      # need no further rewrite once those variables are fixed above. A few
+      # (e.g. Debian's ncurses.pc) hardcode an absolute -L/-I path directly in
+      # Libs:/Cflags: instead -- rewrite those too, to the same place their
+      # own files just landed.
+      sed -E -e "s|^prefix=.*|prefix=$dest_dir|" \
           -e "s|^libdir=.*|libdir=$dest_dir/lib|" \
           -e "s|^includedir=.*|includedir=$dest_dir/include|" \
+          -e "s|-L/[^ ]+|-L$dest_dir/lib|g" \
+          -e "s|-I/[^ ]+|-I$dest_dir/include|g" \
           "$src" > "$dest"
     else
       ln "$src" "$dest"
