@@ -21,7 +21,7 @@ test_top_level_bin_file_exposed() {
 
   local out
   out=$(printf 'bin/foo\t%s\tfoo\n' "$opt/bin/foo" | lapt::expose_add "$opt" "$dest_home" "foo")
-  assert_eq "printed rel path" "bin/foo" "$out"
+  assert_eq "printed bare rel path" "bin/foo" "$out"
   assert_eq "symlink target" "$opt/bin/foo" "$(readlink -f "$dest_home/bin/foo")"
 
   rm -rf "$opt" "$dest_home"
@@ -62,14 +62,15 @@ test_nested_man_page_exposed() {
 
   local out
   out=$(printf 'share/man/man1/foo.1\t%s\tfoo\n' "$opt/share/man/man1/foo.1" | lapt::expose_add "$opt" "$dest_home" "foo")
-  assert_eq "printed rel path" "share/man/man1/foo.1" "$out"
+  assert_eq "printed bare rel path" "share/man/man1/foo.1" "$out"
   assert_eq "symlink target" "$opt/share/man/man1/foo.1" "$(readlink -f "$dest_home/share/man/man1/foo.1")"
 
   rm -rf "$opt" "$dest_home"
 }
 
-# a pre-existing file already at the dest path: ln -s fails, the row is
-# dropped from the output (not exposed), and the call reports failure
+# a pre-existing file already at the dest path: ln -s fails, nothing is
+# printed for the row (it was never linked, so there's nothing to record),
+# and the call reports failure
 # (real case: a stale/foreign file already occupies the exposure path)
 test_collision_at_dest_is_not_exposed_and_fails() {
   local opt dest_home; opt=$(mktemp -d); dest_home=$(mktemp -d)
@@ -78,7 +79,7 @@ test_collision_at_dest_is_not_exposed_and_fails() {
   local out rc
   out=$(printf 'bin/foo\t%s\tfoo\n' "$opt/bin/foo" | lapt::expose_add "$opt" "$dest_home" "foo" 2>/dev/null)
   rc=$?
-  assert_eq "no row printed for the failed one" "" "$out"
+  assert_eq "no row printed" "" "$out"
   if [[ $rc -eq 0 ]]; then
     printf 'FAIL: %s\n  expected nonzero exit, got 0\n' "collision at dest exits nonzero"
     fail=1
@@ -97,12 +98,31 @@ test_collision_on_one_row_does_not_block_others() {
   local out rc
   out=$(printf 'bin/clash\t%s\tfoo\nbin/ok\t%s\tfoo\n' "$opt/bin/clash" "$opt/bin/ok" | lapt::expose_add "$opt" "$dest_home" "foo" 2>/dev/null)
   rc=$?
-  assert_eq "only the non-colliding row printed" "bin/ok" "$out"
+  assert_eq "only the exposed row is printed" "bin/ok" "$out"
   if [[ $rc -eq 0 ]]; then
     printf 'FAIL: %s\n  expected nonzero exit, got 0\n' "overall call still exits nonzero"
     fail=1
   fi
   assert_eq "non-colliding row still gets its symlink" "$opt/bin/ok" "$(readlink -f "$dest_home/bin/ok")"
+
+  rm -rf "$opt" "$dest_home"
+}
+
+# re-running against a row that's already correctly exposed (e.g. re-running
+# `lapt expose <pkg>` after other collisions were fixed) must not choke on
+# "File exists" for the row that already succeeded -- it's recognized from
+# disk (the symlink already points at opt_dir/rel) and left alone
+test_already_correctly_exposed_row_is_left_alone() {
+  local opt dest_home; opt=$(mktemp -d); dest_home=$(mktemp -d)
+  mkdir -p "$opt/bin"; : > "$opt/bin/foo"
+  mkdir -p "$dest_home/bin"; ln -s "$opt/bin/foo" "$dest_home/bin/foo"
+
+  local out rc
+  out=$(printf 'bin/foo\t%s\tfoo\n' "$opt/bin/foo" | lapt::expose_add "$opt" "$dest_home" "foo")
+  rc=$?
+  assert_eq "still reported as exposed" "bin/foo" "$out"
+  assert_eq "exits 0" "0" "$rc"
+  assert_eq "symlink target unchanged" "$opt/bin/foo" "$(readlink -f "$dest_home/bin/foo")"
 
   rm -rf "$opt" "$dest_home"
 }
@@ -113,4 +133,5 @@ test_non_exposable_category_not_exposed
 test_nested_man_page_exposed
 test_collision_at_dest_is_not_exposed_and_fails
 test_collision_on_one_row_does_not_block_others
+test_already_correctly_exposed_row_is_left_alone
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

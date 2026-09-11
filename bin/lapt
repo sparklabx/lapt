@@ -92,11 +92,32 @@ cmd_install() {
   # need to unwind the install: opt_dir is already a complete, valid,
   # removable package, just not fully exposed to $PATH/man yet.
   printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$dest_home" "$pkg" > "$opt_dir/.lapt/exposed" \
-    || echo "lapt: $pkg installed at $opt_dir, but some files could not be exposed (see warnings above)"
+    || echo "lapt: $pkg installed at $opt_dir, but some files could not be exposed (see warnings above) -- run 'lapt expose $pkg' to retry"
+  return 0
+}
+
+cmd_expose() {
+  local pkg=$1
+  local opt_dir="$LAPT_OPT_ROOT/$pkg"
+  [[ -f "$opt_dir/.lapt/version" ]] || lapt::die "$pkg is not installed"
+
+  local version
+  version=$(sed -n 's/^version=//p' "$opt_dir/.lapt/version")
+
+  # Only pkg's own cache entry matters here: expose_add only ever exposes
+  # rows whose origin is the top-level pkg itself, never a dependency's, so
+  # the dependency closure doesn't need to be re-resolved to redo exposure.
+  local manifest
+  manifest=$(lapt::bundle_manifest "$(mktemp -u -d)" "$pkg:$version:$pkg") \
+    || lapt::die "failed to compute what to expose for $pkg"
+
+  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$HOME/.local" "$pkg" > "$opt_dir/.lapt/exposed" \
+    || echo "lapt: $pkg still has files that could not be exposed (see warnings above) -- fix the collisions and run 'lapt expose $pkg' again"
   return 0
 }
 
 case "${1:-}" in
   install) shift; cmd_install "$@" ;;
+  expose) shift; cmd_expose "$@" ;;
   *) lapt::die "unknown subcommand: ${1:-}" ;;
 esac

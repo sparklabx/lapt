@@ -8,6 +8,10 @@ lapt::expose_add() {
       *) continue ;;
     esac
     dest="$dest_home/$rel"
+    if [[ -L $dest && $(readlink -f "$dest") == "$opt_dir/$rel" ]]; then
+      echo "$rel"
+      continue
+    fi
     mkdir -p "$(dirname "$dest")"
     if ln -s "$opt_dir/$rel" "$dest" 2>/dev/null; then
       echo "$rel"

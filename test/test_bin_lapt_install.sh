@@ -181,7 +181,7 @@ test_install_happy_path_no_deps() {
   assert_eq "binary hardlinked into opt/" "real" "$(cat "$opt_dir/bin/foo" 2>/dev/null)"
   assert_eq "no wrapper generated" "" "$(find "$opt_dir" -name '*.wrap' 2>/dev/null)"
   assert_eq "version recorded" "version=1.0" "$(sed -n '1p' "$opt_dir/.lapt/version" 2>/dev/null)"
-  assert_eq "exposure list records bin/foo" "bin/foo" "$(cat "$opt_dir/.lapt/exposed" 2>/dev/null)"
+  assert_eq "exposure list records bin/foo as exposed" "bin/foo" "$(cat "$opt_dir/.lapt/exposed" 2>/dev/null)"
   assert_eq "symlink exposed into ~/.local/bin" "$opt_dir/bin/foo" "$(readlink -f "$HOME/.local/bin/foo" 2>/dev/null)"
 
   teardown_fakes
@@ -335,7 +335,8 @@ test_partial_failure_leaves_no_opt_dir() {
 # exposure runs after the mv, so a collision there (something already sitting
 # at the exposed path, e.g. a stale symlink from a prior botched install)
 # must NOT unwind or fail the install -- opt/<pkg> is already a complete,
-# valid, removable package by that point. install exits 0 and warns.
+# valid, removable package by that point. install exits 0, warns, and points
+# at `lapt expose <pkg>` to retry once the collision is cleared.
 test_exposure_collision_after_mv_keeps_opt_dir() {
   setup_fakes
   fixture_leaf_pkg foo 1.0
@@ -350,10 +351,10 @@ test_exposure_collision_after_mv_keeps_opt_dir() {
   assert_exit0 "exposure collision does not fail the install" "$rc"
   assert_eq "package content still installed" "real" "$(cat "$opt_dir/bin/foo" 2>/dev/null)"
   assert_eq "version still recorded" "version=1.0" "$(sed -n '1p' "$opt_dir/.lapt/version" 2>/dev/null)"
-  assert_eq "unexposed row not recorded" "" "$(cat "$opt_dir/.lapt/exposed" 2>/dev/null)"
+  assert_eq "collided row never recorded (nothing was linked)" "" "$(cat "$opt_dir/.lapt/exposed" 2>/dev/null)"
   case $out in
-    *"could not be exposed"*) ;;
-    *) printf 'FAIL: %s\n  expected notice mentioning "could not be exposed", got: %s\n' "exposure warning" "$out"; fail=1 ;;
+    *"lapt expose foo"*) ;;
+    *) printf 'FAIL: %s\n  expected notice mentioning "lapt expose foo", got: %s\n' "retry hint" "$out"; fail=1 ;;
   esac
 
   teardown_fakes
