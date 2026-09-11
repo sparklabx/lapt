@@ -41,7 +41,7 @@ cmd_install() {
   closure=$(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts \
     --no-breaks --no-replaces --no-enhances "$pkg" | lapt::resolve_closure)
 
-  local -a specs=("$pkg:$version:$pkg")
+  local -a specs=("$pkg"$'\t'"$version"$'\t'"$pkg")
   local system_deps=""
   local group sat
   while IFS= read -r group; do
@@ -54,7 +54,7 @@ cmd_install() {
     pick=$(lapt::pick_candidate "$group") || lapt::die "no apt candidate for $group"
     read -r name dep_version <<<"$pick"
     lapt::cache_ensure "$name" "$dep_version" || lapt::die "failed to fetch $name=$dep_version"
-    specs+=("$name:$dep_version:$name")
+    specs+=("$name"$'\t'"$dep_version"$'\t'"$name")
   done <<<"$closure"
 
   # Assemble into a scratch dir first, sibling of opt_dir on the same
@@ -108,7 +108,7 @@ cmd_expose() {
   # rows whose origin is the top-level pkg itself, never a dependency's, so
   # the dependency closure doesn't need to be re-resolved to redo exposure.
   local manifest
-  manifest=$(lapt::bundle_manifest "$(mktemp -u -d)" "$pkg:$version:$pkg") \
+  manifest=$(lapt::bundle_manifest "$(mktemp -u -d)" "$pkg"$'\t'"$version"$'\t'"$pkg") \
     || lapt::die "failed to compute what to expose for $pkg"
 
   printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$HOME/.local" "$pkg" > "$opt_dir/.lapt/exposed" \
@@ -154,7 +154,7 @@ cmd_fix() {
       still_satisfied+=("$name $dep_version")
     else
       lapt::cache_ensure "$name" "$dep_version" || lapt::die "failed to fetch $name=$dep_version"
-      specs+=("$name:$dep_version:$name")
+      specs+=("$name"$'\t'"$dep_version"$'\t'"$name")
     fi
   done < "$opt_dir/.lapt/system-deps"
 
@@ -171,7 +171,7 @@ cmd_fix() {
     # that from the one place that still knows: pkg's own cache entry
     # (same trick cmd_expose uses to recompute what's pkg's own).
     local own_manifest
-    own_manifest=$(lapt::bundle_manifest "$(mktemp -u -d)" "$pkg:$version:$pkg")
+    own_manifest=$(lapt::bundle_manifest "$(mktemp -u -d)" "$pkg"$'\t'"$version"$'\t'"$pkg")
 
     local -A own_bin=()
     local rel src origin
@@ -231,7 +231,7 @@ cmd_vendor() {
     version=$(apt-cache policy "$pkg" | sed -n 's/^  Candidate: //p')
     [[ -n $version ]] || lapt::die "no apt candidate found for $pkg"
     lapt::cache_ensure "$pkg" "$version" || lapt::die "failed to fetch $pkg=$version"
-    specs+=("$pkg:$version:$pkg")
+    specs+=("$pkg"$'\t'"$version"$'\t'"$pkg")
     added[$pkg]=1
     vendored+=("$pkg")
 
@@ -245,7 +245,7 @@ cmd_vendor() {
       read -r name dep_version <<<"$pick"
       [[ -n ${added[$name]+x} ]] && continue
       lapt::cache_ensure "$name" "$dep_version" || lapt::die "failed to fetch $name=$dep_version"
-      specs+=("$name:$dep_version:$name")
+      specs+=("$name"$'\t'"$dep_version"$'\t'"$name")
       added[$name]=1
     done <<<"$closure"
   done

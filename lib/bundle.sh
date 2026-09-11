@@ -13,7 +13,7 @@ lapt::bundle_manifest() {
   fi
 
   for spec in "$@"; do
-    IFS=: read -r name version origin <<<"$spec"
+    IFS=$'\t' read -r name version origin <<<"$spec"
     cache_path=$(lapt::cache_entry_path "$name" "$version")
     while IFS= read -r -d '' f; do
       rel=${f#"$cache_path"/usr/}
