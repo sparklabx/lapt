@@ -138,10 +138,86 @@ cmd_list() {
   return 0
 }
 
+cmd_fix() {
+  local pkg=$1
+  local opt_dir="$LAPT_OPT_ROOT/$pkg"
+  [[ -f "$opt_dir/.lapt/version" ]] || lapt::die "$pkg is not installed"
+
+  local version
+  version=$(sed -n 's/^version=//p' "$opt_dir/.lapt/version")
+
+  local -a specs=() still_satisfied=()
+  local name dep_version
+  while read -r name dep_version; do
+    [[ -z $name ]] && continue
+    if dpkg -s "$name" >/dev/null 2>&1; then
+      still_satisfied+=("$name $dep_version")
+    else
+      lapt::cache_ensure "$name" "$dep_version" || lapt::die "failed to fetch $name=$dep_version"
+      specs+=("$name:$dep_version:$name")
+    fi
+  done < "$opt_dir/.lapt/system-deps"
+
+  if (( ${#specs[@]} > 0 )); then
+    local manifest
+    manifest=$(lapt::bundle_manifest "$opt_dir" "${specs[@]}") || lapt::die "bundle failed while fixing $pkg"
+    lapt::bundle_apply "$opt_dir" 0 <<<"$manifest"
+
+    # bundle_manifest's existing-scan of the real opt_dir tags every
+    # already-present file's origin as the literal string "existing" --
+    # it can't tell "pkg's own file" from "a dependency's file" once
+    # they're sitting on disk together. needs_wrapper/wrap_top_level_bins
+    # both key off origin == pkg to find pkg's own bin/ files, so recover
+    # that from the one place that still knows: pkg's own cache entry
+    # (same trick cmd_expose uses to recompute what's pkg's own).
+    local own_manifest
+    own_manifest=$(lapt::bundle_manifest "$(mktemp -u -d)" "$pkg:$version:$pkg")
+
+    local -A own_bin=()
+    local rel src origin
+    while IFS=$'\t' read -r rel src origin; do
+      [[ $rel == bin/* ]] && own_bin[$rel]=1
+    done <<<"$own_manifest"
+
+    # Already wrapped if any of pkg's own bin/ files already has a .real
+    # sibling -- wrap_top_level_bins unconditionally mv's bin/<name> to
+    # bin/<name>.real, so calling it again on an already-wrapped package
+    # would clobber the real binary with the wrapper script itself. Only
+    # regenerate a wrapper the first time it becomes necessary (a package
+    # that was entirely system-satisfied has no wrapper at all until now,
+    # per ADR-0007).
+    local already_wrapped=0
+    for rel in "${!own_bin[@]}"; do
+      [[ -e "$opt_dir/$rel.real" ]] && already_wrapped=1
+    done
+
+    if (( ! already_wrapped )); then
+      local wrap_manifest=""
+      while IFS=$'\t' read -r rel src origin; do
+        [[ $origin == existing && -n ${own_bin[$rel]+x} ]] && origin=$pkg
+        wrap_manifest+="$rel"$'\t'"$src"$'\t'"$origin"$'\n'
+      done <<<"$manifest"
+
+      local after_kind
+      after_kind=$(printf '%s' "$wrap_manifest" | lapt::needs_wrapper "$pkg")
+      if [[ -n $after_kind ]]; then
+        local lib_dir="" bin_dir=""
+        [[ $after_kind == *lib* ]] && lib_dir="$opt_dir/lib"
+        [[ $after_kind == *bin* ]] && bin_dir="$opt_dir/bin"
+        printf '%s' "$wrap_manifest" | lapt::wrap_top_level_bins "$opt_dir" "$opt_dir" "$pkg" "$lib_dir" "$bin_dir"
+      fi
+    fi
+  fi
+
+  printf '%s\n' "${still_satisfied[@]}" | lapt::system_deps_write "$opt_dir"
+  return 0
+}
+
 case "${1:-}" in
   install) shift; cmd_install "$@" ;;
   expose) shift; cmd_expose "$@" ;;
   remove) shift; cmd_remove "$@" ;;
   list) shift; cmd_list "$@" ;;
+  fix) shift; cmd_fix "$@" ;;
   *) lapt::die "unknown subcommand: ${1:-}" ;;
 esac
