@@ -221,6 +221,16 @@ cmd_vendor() {
   local -A added=()
   local pkg group closure pick name dep_version version
 
+  mkdir -p "$target_dir"
+  if [[ ! -f $target_dir/env.sh ]]; then
+    {
+      echo '# source this to use the vendored tree: . env.sh'
+      printf 'export PATH="%s/bin:$PATH"\n' "$target_dir"
+      printf 'export LD_LIBRARY_PATH="%s/lib:$LD_LIBRARY_PATH"\n' "$target_dir"
+      printf 'export PKG_CONFIG_PATH="%s/lib/pkgconfig:$PKG_CONFIG_PATH"\n' "$target_dir"
+    } > "$target_dir/env.sh"
+  fi
+
   for pkg in "$@"; do
     if dpkg -s "$pkg" >/dev/null 2>&1; then
       echo "lapt: $pkg is already installed via the system package manager"
@@ -252,10 +262,10 @@ cmd_vendor() {
 
   (( ${#specs[@]} > 0 )) || return 0
 
-  mkdir -p "$target_dir"
   local manifest
   manifest=$(lapt::bundle_manifest "$target_dir" "${specs[@]}") || lapt::die "vendor bundle failed"
   lapt::bundle_apply "$target_dir" 1 <<<"$manifest"
+
   echo "lapt: vendored ${vendored[*]} into $target_dir"
   return 0
 }
