@@ -1,6 +1,6 @@
 lapt::expose_add() {
   local opt_dir=$1 dest_home=$2 pkg=$3
-  local rel src origin dest
+  local rel src origin dest miss=0
   while IFS=$'\t' read -r rel src origin; do
     [[ $origin == "$pkg" ]] || continue
     case $rel in
@@ -9,9 +9,14 @@ lapt::expose_add() {
     esac
     dest="$dest_home/$rel"
     mkdir -p "$(dirname "$dest")"
-    ln -s "$opt_dir/$rel" "$dest"
-    echo "$rel"
+    if ln -s "$opt_dir/$rel" "$dest" 2>/dev/null; then
+      echo "$rel"
+    else
+      echo "lapt: warning: could not expose $rel: $dest already exists" >&2
+      miss=1
+    fi
   done
+  return "$miss"
 }
 
 lapt::expose_remove() {

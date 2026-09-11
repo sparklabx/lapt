@@ -83,13 +83,17 @@ cmd_install() {
   fi
 
   lapt::version_write "$work_dir" "$version"
-  # expose_add's symlinks embed $opt_dir (the final path) even though the
-  # files are still physically under $work_dir -- they resolve as soon as
-  # the mv below lands.
-  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$dest_home" "$pkg" > "$work_dir/.lapt/exposed"
   printf '%s' "$system_deps" | lapt::system_deps_write "$work_dir"
 
   mv "$work_dir" "$opt_dir"
+
+  # Exposure runs after the mv, once opt_dir is the real final path -- no
+  # need to bake in a not-yet-existing target, and a collision here doesn't
+  # need to unwind the install: opt_dir is already a complete, valid,
+  # removable package, just not fully exposed to $PATH/man yet.
+  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$dest_home" "$pkg" > "$opt_dir/.lapt/exposed" \
+    || echo "lapt: $pkg installed at $opt_dir, but some files could not be exposed (see warnings above)"
+  return 0
 }
 
 case "${1:-}" in

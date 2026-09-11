@@ -332,6 +332,33 @@ test_partial_failure_leaves_no_opt_dir() {
   teardown_fakes
 }
 
+# exposure runs after the mv, so a collision there (something already sitting
+# at the exposed path, e.g. a stale symlink from a prior botched install)
+# must NOT unwind or fail the install -- opt/<pkg> is already a complete,
+# valid, removable package by that point. install exits 0 and warns.
+test_exposure_collision_after_mv_keeps_opt_dir() {
+  setup_fakes
+  fixture_leaf_pkg foo 1.0
+  mkdir -p "$HOME/.local/bin"
+  : > "$HOME/.local/bin/foo"
+
+  local out rc
+  out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
+  rc=$?
+  local opt_dir="$HOME/.local/share/lapt/opt/foo"
+
+  assert_exit0 "exposure collision does not fail the install" "$rc"
+  assert_eq "package content still installed" "real" "$(cat "$opt_dir/bin/foo" 2>/dev/null)"
+  assert_eq "version still recorded" "version=1.0" "$(sed -n '1p' "$opt_dir/.lapt/version" 2>/dev/null)"
+  assert_eq "unexposed row not recorded" "" "$(cat "$opt_dir/.lapt/exposed" 2>/dev/null)"
+  case $out in
+    *"could not be exposed"*) ;;
+    *) printf 'FAIL: %s\n  expected notice mentioning "could not be exposed", got: %s\n' "exposure warning" "$out"; fail=1 ;;
+  esac
+
+  teardown_fakes
+}
+
 test_already_installed_is_noop
 test_system_installed_is_noop
 test_no_top_level_bin_aborts
@@ -341,4 +368,5 @@ test_unsatisfied_dep_is_fetched_and_bundled
 test_lib_dep_triggers_wrapper
 test_foreign_bin_dep_triggers_wrapper
 test_partial_failure_leaves_no_opt_dir
+test_exposure_collision_after_mv_keeps_opt_dir
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi
