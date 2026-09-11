@@ -213,11 +213,24 @@ cmd_fix() {
   return 0
 }
 
+cmd_prune() {
+  local cache_root="${LAPT_CACHE_ROOT:-$HOME/.local/share/lapt/cache}"
+  local entry_dir
+  for entry_dir in "$cache_root"/*/; do
+    [[ -d $entry_dir ]] || continue
+    lapt::cache_referenced "$entry_dir" && continue
+    rm -rf "$entry_dir"
+    echo "lapt: pruned $(basename "$entry_dir")"
+  done
+  return 0
+}
+
 case "${1:-}" in
   install) shift; cmd_install "$@" ;;
   expose) shift; cmd_expose "$@" ;;
   remove) shift; cmd_remove "$@" ;;
   list) shift; cmd_list "$@" ;;
   fix) shift; cmd_fix "$@" ;;
+  prune) shift; cmd_prune "$@" ;;
   *) lapt::die "unknown subcommand: ${1:-}" ;;
 esac
