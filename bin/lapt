@@ -116,8 +116,20 @@ cmd_expose() {
   return 0
 }
 
+cmd_remove() {
+  local pkg=$1
+  local opt_dir="$LAPT_OPT_ROOT/$pkg"
+  [[ -f "$opt_dir/.lapt/version" ]] || lapt::die "$pkg is not installed"
+
+  lapt::expose_remove "$opt_dir" "$HOME/.local" < "$opt_dir/.lapt/exposed"
+  rm -rf "$opt_dir"
+  echo "lapt: removed $pkg"
+  return 0
+}
+
 case "${1:-}" in
   install) shift; cmd_install "$@" ;;
   expose) shift; cmd_expose "$@" ;;
+  remove) shift; cmd_remove "$@" ;;
   *) lapt::die "unknown subcommand: ${1:-}" ;;
 esac
