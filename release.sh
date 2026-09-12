@@ -11,7 +11,7 @@ tar czf "$tarball" -C "$root" bin lib
 if gh release view "$version" >/dev/null 2>&1; then
   gh release upload "$version" "$tarball" --clobber
 else
-  gh release create "$version" "$tarball" --title "$version" --generate-notes
+  gh release create "$version" "$tarball" --title "$version" --notes ""
 fi
 # gh release create attaches assets via create-as-draft -> upload -> publish;
 # if that last publish call doesn't land, the release is left stuck in Draft.
