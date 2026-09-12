@@ -14,7 +14,8 @@ lapt::cache_ensure() {
   [[ -d $entry ]] && return 0
 
   local scratch; scratch=$(mktemp -d)
-  if ! (cd "$scratch" && apt-get download "${name}=${version}" >/dev/null 2>&1); then
+  echo "lapt: fetching ${name} ${version}..." >&2
+  if ! (cd "$scratch" && apt-get download "${name}=${version}"); then
     echo "lapt: error: apt-get download failed for $name=$version" >&2
     rm -rf "$scratch"
     return 1
