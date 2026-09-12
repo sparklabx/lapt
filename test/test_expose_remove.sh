@@ -16,32 +16,32 @@ assert_eq() {
 
 # a symlink resolving into this package's own opt_dir is unlinked
 test_own_symlink_removed() {
-  local opt lapt_home; opt=$(mktemp -d); lapt_home=$(mktemp -d)
+  local lapt_home opt; lapt_home=$(mktemp -d); opt="$lapt_home/opt/foo"
   mkdir -p "$opt/bin"; : > "$opt/bin/foo"
   mkdir -p "$lapt_home/bin"; ln -s "$opt/bin/foo" "$lapt_home/bin/foo"
 
-  printf 'bin/foo\n' | lapt::expose_remove "$opt" "$lapt_home"
+  printf 'bin/foo\n' | LAPT_HOME="$lapt_home" lapt::expose_remove "foo"
 
   if [[ -e "$lapt_home/bin/foo" || -L "$lapt_home/bin/foo" ]]; then
     printf 'FAIL: %s\n  expected symlink removed, still present\n' "own symlink removed"
     fail=1
   fi
 
-  rm -rf "$opt" "$lapt_home"
+  rm -rf "$lapt_home"
 }
 
 # a symlink that now resolves into a different package's opt_dir (claimed by a later install) is left alone
 test_reclaimed_symlink_left_alone() {
-  local opt other lapt_home; opt=$(mktemp -d); other=$(mktemp -d); lapt_home=$(mktemp -d)
+  local lapt_home other; lapt_home=$(mktemp -d); other="$lapt_home/opt/other"
   mkdir -p "$other/bin"; : > "$other/bin/foo"
   mkdir -p "$lapt_home/bin"; ln -s "$other/bin/foo" "$lapt_home/bin/foo"
 
-  printf 'bin/foo\n' | lapt::expose_remove "$opt" "$lapt_home"
+  printf 'bin/foo\n' | LAPT_HOME="$lapt_home" lapt::expose_remove "foo"
 
   assert_eq "reclaimed symlink still points at other pkg" \
     "$other/bin/foo" "$(readlink -f "$lapt_home/bin/foo")"
 
-  rm -rf "$opt" "$other" "$lapt_home"
+  rm -rf "$lapt_home"
 }
 
 test_own_symlink_removed

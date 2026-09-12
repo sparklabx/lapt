@@ -11,11 +11,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 lapt::die() { echo "lapt: $*" >&2; exit 1; }
 
 LAPT_HOME="$HOME/.lapt"
-LAPT_OPT_ROOT="$LAPT_HOME/opt"
 
 cmd_install() {
   local pkg=$1
-  local opt_dir="$LAPT_OPT_ROOT/$pkg"
+  local opt_dir="$LAPT_HOME/opt/$pkg"
 
   if [[ -d $opt_dir ]]; then
     echo "lapt: $pkg is already installed — run 'lapt remove $pkg' first"
@@ -64,8 +63,8 @@ cmd_install() {
   # incomplete, and the already-installed check above would treat that as a
   # permanently "done" install with no way to retry. Same atomic-mv pattern
   # lapt::cache_ensure already uses for cache entries.
-  mkdir -p "$LAPT_OPT_ROOT"
-  local work_dir; work_dir=$(mktemp -d "$LAPT_OPT_ROOT/.tmp.XXXXXX")
+  mkdir -p "$LAPT_HOME/opt"
+  local work_dir; work_dir=$(mktemp -d "$LAPT_HOME/opt/.tmp.XXXXXX")
 
   local manifest
   manifest=$(lapt::bundle_manifest "$work_dir" "${specs[@]}") || { rm -rf "$work_dir"; lapt::die "bundle failed for $pkg"; }
@@ -91,14 +90,14 @@ cmd_install() {
   # need to bake in a not-yet-existing target, and a collision here doesn't
   # need to unwind the install: opt_dir is already a complete, valid,
   # removable package, just not fully exposed to $PATH/man yet.
-  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$LAPT_HOME" "$pkg" > "$opt_dir/.lapt/exposed" \
+  printf '%s\n' "$manifest" | lapt::expose_add "$pkg" > "$opt_dir/.lapt/exposed" \
     || echo "lapt: $pkg installed at $opt_dir, but some files could not be exposed (see warnings above) -- run 'lapt expose $pkg' to retry"
   return 0
 }
 
 cmd_expose() {
   local pkg=$1
-  local opt_dir="$LAPT_OPT_ROOT/$pkg"
+  local opt_dir="$LAPT_HOME/opt/$pkg"
   [[ -f "$opt_dir/.lapt/version" ]] || lapt::die "$pkg is not installed"
 
   local version
@@ -111,17 +110,17 @@ cmd_expose() {
   manifest=$(lapt::bundle_manifest "$(mktemp -u -d)" "$pkg"$'\t'"$version"$'\t'"$pkg") \
     || lapt::die "failed to compute what to expose for $pkg"
 
-  printf '%s\n' "$manifest" | lapt::expose_add "$opt_dir" "$LAPT_HOME" "$pkg" > "$opt_dir/.lapt/exposed" \
+  printf '%s\n' "$manifest" | lapt::expose_add "$pkg" > "$opt_dir/.lapt/exposed" \
     || echo "lapt: $pkg still has files that could not be exposed (see warnings above) -- fix the collisions and run 'lapt expose $pkg' again"
   return 0
 }
 
 cmd_remove() {
   local pkg=$1
-  local opt_dir="$LAPT_OPT_ROOT/$pkg"
+  local opt_dir="$LAPT_HOME/opt/$pkg"
   [[ -f "$opt_dir/.lapt/version" ]] || lapt::die "$pkg is not installed"
 
-  lapt::expose_remove "$opt_dir" "$LAPT_HOME" < "$opt_dir/.lapt/exposed"
+  lapt::expose_remove "$pkg" < "$opt_dir/.lapt/exposed"
   rm -rf "$opt_dir"
   echo "lapt: removed $pkg"
   return 0
@@ -129,7 +128,7 @@ cmd_remove() {
 
 cmd_list() {
   local opt_dir
-  for opt_dir in "$LAPT_OPT_ROOT"/*/; do
+  for opt_dir in "$LAPT_HOME/opt"/*/; do
     [[ -f "$opt_dir/.lapt/version" ]] || continue
     local version
     version=$(sed -n 's/^version=//p' "$opt_dir/.lapt/version")
@@ -140,7 +139,7 @@ cmd_list() {
 
 cmd_fix() {
   local pkg=$1
-  local opt_dir="$LAPT_OPT_ROOT/$pkg"
+  local opt_dir="$LAPT_HOME/opt/$pkg"
   [[ -f "$opt_dir/.lapt/version" ]] || lapt::die "$pkg is not installed"
 
   local version
