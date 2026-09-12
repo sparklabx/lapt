@@ -33,7 +33,7 @@ lapt::bundle_manifest() {
 }
 
 lapt::bundle_apply() {
-  local dest_dir=$1 rewrite_pc=$2
+  local dest_dir=$1 rewrite_pc=$2 final_dir=${3:-$1}
   local rel src origin dest
   while IFS=$'\t' read -r rel src origin; do
     [[ $origin == existing ]] && continue
@@ -44,12 +44,15 @@ lapt::bundle_apply() {
       # need no further rewrite once those variables are fixed above. A few
       # (e.g. Debian's ncurses.pc) hardcode an absolute -L/-I path directly in
       # Libs:/Cflags: instead -- rewrite those too, to the same place their
-      # own files just landed.
-      sed -E -e "s|^prefix=.*|prefix=$dest_dir|" \
-          -e "s|^libdir=.*|libdir=$dest_dir/lib|" \
-          -e "s|^includedir=.*|includedir=$dest_dir/include|" \
-          -e "s|-L/[^ ]+|-L$dest_dir/lib|g" \
-          -e "s|-I/[^ ]+|-I$dest_dir/include|g" \
+      # own files just landed. final_dir is where the files will actually live
+      # once the caller is done (e.g. cmd_install's post-mv opt_dir) -- it can
+      # differ from dest_dir, which is only where they physically live right
+      # now (e.g. cmd_install's pre-mv work_dir).
+      sed -E -e "s|^prefix=.*|prefix=$final_dir|" \
+          -e "s|^libdir=.*|libdir=$final_dir/lib|" \
+          -e "s|^includedir=.*|includedir=$final_dir/include|" \
+          -e "s|-L/[^ ]+|-L$final_dir/lib|g" \
+          -e "s|-I/[^ ]+|-I$final_dir/include|g" \
           "$src" > "$dest"
     else
       ln "$src" "$dest"

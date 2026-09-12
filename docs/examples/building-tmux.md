@@ -1,26 +1,29 @@
 # Building tmux against vendored libraries
 
 Walkthrough for building tmux from source without installing
-`libevent-dev`/`libncurses-dev` system-wide, using `lapt vendor`.
+`libevent-dev`/`libncurses-dev` system-wide, using `lapt install` +
+`lapt vendor`.
 
-## 1. Vendor the build dependencies
+## 1. Install the build dependencies
 
 ```
-lapt vendor <target-dir> libevent-dev libncurses-dev
+lapt install libevent-dev libncurses-dev
 ```
 
-Resolves each package's dependency closure, skips anything already
-system-satisfied, and flattens libraries/headers/pkgconfig into
-`<target-dir>`. Also writes `<target-dir>/env.sh`.
+Each package is assembled into its own `opt/<pkg>`, dependency closure
+resolved, system-satisfied members skipped, and `.pc` files rewritten to
+point at that package's own `opt/<pkg>`.
 
 ## 2. Source the environment
 
 ```
-. <target-dir>/env.sh
+. <(lapt vendor libevent-dev libncurses-dev)
 ```
 
-Exports `PATH`, `LD_LIBRARY_PATH`, and `PKG_CONFIG_PATH` pointing at the
-vendored tree.
+Requires both packages already installed (step 1) — `vendor` does no
+fetching of its own. Prints `PATH`, `LD_LIBRARY_PATH`, and
+`PKG_CONFIG_PATH` lines pointing at each package's own `opt/<pkg>` (in the
+order given), which the process substitution above sources directly.
 
 ## 3. A build-time gotcha: bison
 
@@ -31,8 +34,8 @@ doesn't put files at those absolute paths. `bison` runs *during* `make`
 overrides before building, not after:
 
 ```
-export BISON_PKGDATADIR="$HOME/.local/share/lapt/opt/bison/share/bison"
-export M4="$HOME/.local/share/lapt/opt/bison/bin/m4"
+export BISON_PKGDATADIR="$HOME/.lapt/opt/bison/share/bison"
+export M4="$HOME/.lapt/opt/bison/bin/m4"
 ```
 
 This is upstream bison's own behavior, unrelated to lapt's vendor/wrap
@@ -41,12 +44,8 @@ the system's.
 
 ## 4. Configure and build
 
-`--prefix` can be anywhere — it's unrelated to `<target-dir>`. Just don't
-point it *at* `<target-dir>` itself: `vendor` already populates
-`<target-dir>/bin`, `<target-dir>/lib`, etc. with the vendored
-dependencies, so installing the build there too would land in and mix with
-those same directories. A subdirectory (e.g. `<target-dir>/out`) or a wholly
-separate path both work fine.
+`--prefix` can be anywhere — pick a normal build/install directory, same as
+any other from-source build.
 
 ```
 cd tmux-<version>
@@ -54,7 +53,7 @@ cd tmux-<version>
 make -j"$(nproc)"
 ```
 
-`pkg-config` finds the vendored `ncurses`/`libevent` `.pc` files via
+`pkg-config` finds the installed `ncurses`/`libevent` `.pc` files via
 `PKG_CONFIG_PATH`; those `.pc` files carry the include/lib paths into the
 compiler and linker.
 
@@ -66,5 +65,5 @@ ln -s "<install-dir>/bin/tmux" "$HOME/.local/bin/tmux"
 ```
 
 `tmux` still needs the vendored libraries to be reachable at runtime, so
-`env.sh` must be sourced in any shell that runs it — the symlink alone
-doesn't carry `LD_LIBRARY_PATH` with it.
+step 2's env script must be sourced in any shell that runs it — the symlink
+alone doesn't carry `LD_LIBRARY_PATH` with it.

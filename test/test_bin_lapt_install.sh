@@ -135,32 +135,31 @@ test_system_installed_is_noop() {
   teardown_fakes
 }
 
-# top-level package has no own usr/bin (only usr/lib): hard-abort, exit 1,
-# no opt/<pkg> left behind (ADR-0005)
-test_no_top_level_bin_aborts() {
+# top-level package has no own usr/bin (only usr/lib + a pkgconfig file):
+# install succeeds anyway (ADR-0012 drops the old hard-abort), and the .pc
+# file is rewritten to point at opt/<pkg> (rewrite_pc is now unconditional
+# for install, same mechanism vendor already used)
+test_library_only_install_succeeds_and_rewrites_pc() {
   setup_fakes
   printf '%s\n' "foo" > "$FIXTURE_DIR/closure/foo"
   printf '%s' "1.0" > "$FIXTURE_DIR/candidate/foo"
-  printf -- '-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/lib/libfoo.so.1\n' \
+  printf -- '-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/lib/libfoo.so.1\n-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/lib/pkgconfig/foo.pc\n' \
     > "$FIXTURE_DIR/deb_contents/foo_1.0"
-  mkdir -p "$FIXTURE_DIR/extract/foo_1.0/usr/lib"
+  mkdir -p "$FIXTURE_DIR/extract/foo_1.0/usr/lib/pkgconfig"
   printf 'lib' > "$FIXTURE_DIR/extract/foo_1.0/usr/lib/libfoo.so.1"
+  printf 'prefix=/usr\nlibdir=${prefix}/lib\nincludedir=${prefix}/include\n\nName: foo\n' \
+    > "$FIXTURE_DIR/extract/foo_1.0/usr/lib/pkgconfig/foo.pc"
 
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
   rc=$?
-  if [[ $rc -eq 0 ]]; then
-    printf 'FAIL: %s\n  expected nonzero exit, got 0\n' "no-bin aborts"
-    fail=1
-  fi
-  if [[ -e "$HOME/.lapt/opt/foo" ]]; then
-    printf 'FAIL: %s\n  expected no opt/foo left behind, found one\n' "no-bin leaves nothing"
-    fail=1
-  fi
-  case $out in
-    *vendor*) ;;
-    *) printf 'FAIL: %s\n  expected error hinting at vendor, got: %s\n' "no-bin hints vendor" "$out"; fail=1 ;;
-  esac
+  local opt_dir="$HOME/.lapt/opt/foo"
+
+  assert_exit0 "library-only install exits 0: $out" "$rc"
+  assert_eq "lib hardlinked into opt/" "lib" "$(cat "$opt_dir/lib/libfoo.so.1" 2>/dev/null)"
+  assert_eq ".pc prefix rewritten to opt_dir" "prefix=$opt_dir" "$(sed -n '1p' "$opt_dir/lib/pkgconfig/foo.pc" 2>/dev/null)"
+  assert_eq ".pc libdir rewritten to opt_dir/lib" "libdir=$opt_dir/lib" "$(sed -n '2p' "$opt_dir/lib/pkgconfig/foo.pc" 2>/dev/null)"
+  assert_eq "version recorded" "version=1.0" "$(sed -n '1p' "$opt_dir/.lapt/version" 2>/dev/null)"
 
   teardown_fakes
 }
@@ -361,7 +360,7 @@ test_exposure_collision_after_mv_keeps_opt_dir() {
 
 test_already_installed_is_noop
 test_system_installed_is_noop
-test_no_top_level_bin_aborts
+test_library_only_install_succeeds_and_rewrites_pc
 test_install_happy_path_no_deps
 test_system_satisfied_dep_is_skipped
 test_unsatisfied_dep_is_fetched_and_bundled

@@ -33,10 +33,6 @@ cmd_install() {
   lapt::cache_ensure "$pkg" "$version" || lapt::die "failed to fetch $pkg=$version"
   local cache_path; cache_path=$(lapt::cache_entry_path "$pkg" "$version")
 
-  if [[ -z $(find "$cache_path/usr/bin" -type f -print -quit 2>/dev/null) ]]; then
-    lapt::die "$pkg has no executables of its own — use 'lapt vendor' for library-only packages"
-  fi
-
   local closure
   closure=$(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts \
     --no-breaks --no-replaces --no-enhances "$pkg" | lapt::resolve_closure)
@@ -68,7 +64,7 @@ cmd_install() {
 
   local manifest
   manifest=$(lapt::bundle_manifest "$work_dir" "${specs[@]}") || { rm -rf "$work_dir"; lapt::die "bundle failed for $pkg"; }
-  lapt::bundle_apply "$work_dir" 0 <<<"$manifest"
+  lapt::bundle_apply "$work_dir" 1 "$opt_dir" <<<"$manifest"
 
   local wrapper_kind; wrapper_kind=$(printf '%s\n' "$manifest" | lapt::needs_wrapper "$pkg")
   if [[ -n $wrapper_kind ]]; then
@@ -213,59 +209,22 @@ cmd_fix() {
 }
 
 cmd_vendor() {
-  local target_dir=$1; shift
-  (( $# > 0 )) || lapt::die "usage: lapt vendor <target-dir> <pkg...>"
+  (( $# > 0 )) || lapt::die "usage: lapt vendor <pkg...>"
 
-  local -a specs=() vendored=()
-  local -A added=()
-  local pkg group closure pick name dep_version version
-
-  mkdir -p "$target_dir"
-  if [[ ! -f $target_dir/env.sh ]]; then
-    {
-      echo '# source this to use the vendored tree: . env.sh'
-      printf 'export PATH="%s/bin:$PATH"\n' "$target_dir"
-      printf 'export LD_LIBRARY_PATH="%s/lib:$LD_LIBRARY_PATH"\n' "$target_dir"
-      printf 'export PKG_CONFIG_PATH="%s/lib/pkgconfig:$PKG_CONFIG_PATH"\n' "$target_dir"
-    } > "$target_dir/env.sh"
-  fi
-
+  local -a missing=()
+  local pkg
   for pkg in "$@"; do
-    if dpkg -s "$pkg" >/dev/null 2>&1; then
-      echo "lapt: $pkg is already installed via the system package manager"
-      continue
-    fi
-    [[ -n ${added[$pkg]+x} ]] && continue
-
-    version=$(apt-cache policy "$pkg" | sed -n 's/^  Candidate: //p')
-    [[ -n $version ]] || lapt::die "no apt candidate found for $pkg"
-    lapt::cache_ensure "$pkg" "$version" || lapt::die "failed to fetch $pkg=$version"
-    specs+=("$pkg"$'\t'"$version"$'\t'"$pkg")
-    added[$pkg]=1
-    vendored+=("$pkg")
-
-    closure=$(apt-cache depends --recurse --no-recommends --no-suggests --no-conflicts \
-      --no-breaks --no-replaces --no-enhances "$pkg" | lapt::resolve_closure)
-
-    while IFS= read -r group; do
-      [[ -z $group ]] && continue
-      lapt::is_system_satisfied "$group" >/dev/null && continue
-      pick=$(lapt::pick_candidate "$group") || lapt::die "no apt candidate for $group"
-      read -r name dep_version <<<"$pick"
-      [[ -n ${added[$name]+x} ]] && continue
-      lapt::cache_ensure "$name" "$dep_version" || lapt::die "failed to fetch $name=$dep_version"
-      specs+=("$name"$'\t'"$dep_version"$'\t'"$name")
-      added[$name]=1
-    done <<<"$closure"
+    [[ -f "$LAPT_HOME/opt/$pkg/.lapt/version" ]] || missing+=("$pkg")
   done
+  (( ${#missing[@]} == 0 )) || lapt::die "not installed: ${missing[*]} — run 'lapt install' first"
 
-  (( ${#specs[@]} > 0 )) || return 0
-
-  local manifest
-  manifest=$(lapt::bundle_manifest "$target_dir" "${specs[@]}") || lapt::die "vendor bundle failed"
-  lapt::bundle_apply "$target_dir" 1 <<<"$manifest"
-
-  echo "lapt: vendored ${vendored[*]} into $target_dir"
+  local opt_dir
+  for pkg in "$@"; do
+    opt_dir="$LAPT_HOME/opt/$pkg"
+    printf 'export PATH="%s/bin:$PATH"\n' "$opt_dir"
+    printf 'export LD_LIBRARY_PATH="%s/lib:$LD_LIBRARY_PATH"\n' "$opt_dir"
+    printf 'export PKG_CONFIG_PATH="%s/lib/pkgconfig:$PKG_CONFIG_PATH"\n' "$opt_dir"
+  done
   return 0
 }
 
