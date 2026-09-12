@@ -9,10 +9,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/lib/cache.sh"
 
 lapt::die() { echo "lapt: $*" >&2; exit 1; }
+lapt::warn() { echo "lapt: $*" >&2; }
 
 LAPT_HOME="$HOME/.lapt"
 
-cmd_install() {
+_install_one() {
   local pkg=$1
   local opt_dir="$LAPT_HOME/opt/$pkg"
 
@@ -28,9 +29,9 @@ cmd_install() {
 
   local version
   version=$(apt-cache policy "$pkg" | sed -n 's/^  Candidate: //p')
-  [[ -n $version ]] || lapt::die "no apt candidate found for $pkg"
+  [[ -n $version ]] || { lapt::warn "no apt candidate found for $pkg"; return 1; }
 
-  lapt::cache_ensure "$pkg" "$version" || lapt::die "failed to fetch $pkg=$version"
+  lapt::cache_ensure "$pkg" "$version" || { lapt::warn "failed to fetch $pkg=$version"; return 1; }
   local cache_path; cache_path=$(lapt::cache_entry_path "$pkg" "$version")
 
   local closure
@@ -47,9 +48,9 @@ cmd_install() {
       continue
     fi
     local pick name dep_version
-    pick=$(lapt::pick_candidate "$group") || lapt::die "no apt candidate for $group"
+    pick=$(lapt::pick_candidate "$group") || { lapt::warn "no apt candidate for $group"; return 1; }
     read -r name dep_version <<<"$pick"
-    lapt::cache_ensure "$name" "$dep_version" || lapt::die "failed to fetch $name=$dep_version"
+    lapt::cache_ensure "$name" "$dep_version" || { lapt::warn "failed to fetch $name=$dep_version"; return 1; }
     specs+=("$name"$'\t'"$dep_version"$'\t'"$name")
   done <<<"$closure"
 
@@ -63,7 +64,7 @@ cmd_install() {
   local work_dir; work_dir=$(mktemp -d "$LAPT_HOME/opt/.tmp.XXXXXX")
 
   local manifest
-  manifest=$(lapt::bundle_manifest "$work_dir" "${specs[@]}") || { rm -rf "$work_dir"; lapt::die "bundle failed for $pkg"; }
+  manifest=$(lapt::bundle_manifest "$work_dir" "${specs[@]}") || { rm -rf "$work_dir"; lapt::warn "bundle failed for $pkg"; return 1; }
   lapt::bundle_apply "$work_dir" 1 "$opt_dir" <<<"$manifest"
 
   local wrapper_kind; wrapper_kind=$(printf '%s\n' "$manifest" | lapt::needs_wrapper "$pkg")
@@ -91,6 +92,17 @@ cmd_install() {
   return 0
 }
 
+cmd_install() {
+  (( $# > 0 )) || lapt::die "usage: lapt install <pkg...>"
+  local -a failed=()
+  local pkg
+  for pkg in "$@"; do
+    _install_one "$pkg" || failed+=("$pkg")
+  done
+  (( ${#failed[@]} == 0 )) || lapt::die "install failed for: ${failed[*]}"
+  return 0
+}
+
 cmd_expose() {
   local pkg=$1
   local opt_dir="$LAPT_HOME/opt/$pkg"
@@ -111,10 +123,10 @@ cmd_expose() {
   return 0
 }
 
-cmd_remove() {
+_remove_one() {
   local pkg=$1
   local opt_dir="$LAPT_HOME/opt/$pkg"
-  [[ -f "$opt_dir/.lapt/version" ]] || lapt::die "$pkg is not installed"
+  [[ -f "$opt_dir/.lapt/version" ]] || { lapt::warn "$pkg is not installed"; return 1; }
 
   lapt::expose_remove "$pkg" < "$opt_dir/.lapt/exposed"
   rm -rf "$opt_dir"
@@ -122,13 +134,30 @@ cmd_remove() {
   return 0
 }
 
+cmd_remove() {
+  (( $# > 0 )) || lapt::die "usage: lapt remove <pkg...>"
+  local -a failed=()
+  local pkg
+  for pkg in "$@"; do
+    _remove_one "$pkg" || failed+=("$pkg")
+  done
+  (( ${#failed[@]} == 0 )) || lapt::die "remove failed for: ${failed[*]}"
+  return 0
+}
+
 cmd_list() {
+  local -A want=()
+  local pkg
+  for pkg in "$@"; do want[$pkg]=1; done
+
   local opt_dir
   for opt_dir in "$LAPT_HOME/opt"/*/; do
     [[ -f "$opt_dir/.lapt/version" ]] || continue
+    pkg=$(basename "$opt_dir")
+    (( $# == 0 )) || [[ -n ${want[$pkg]+x} ]] || continue
     local version
     version=$(sed -n 's/^version=//p' "$opt_dir/.lapt/version")
-    printf '%s %s\n' "$(basename "$opt_dir")" "$(sed -E 's/\+deb[0-9]+u[0-9]+$//' <<<"$version")"
+    printf '%s %s\n' "$pkg" "$(sed -E 's/\+deb[0-9]+u[0-9]+$//' <<<"$version")"
   done
   return 0
 }

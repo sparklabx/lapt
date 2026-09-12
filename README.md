@@ -11,10 +11,9 @@ from source. Under the hood it's a thin wrapper around `apt-get download` +
 - **Each package in its own private tree, easy to remove** - no shared
   `/usr`, no apt dependency-hell: removing one package can't break another,
   because none of them share files.
-- **Vendor libraries for building** - pulls a library's files into a plain
-  folder and writes an `env.sh` you source to set the right env vars, so you
-  can build something against it without installing a `-dev` package
-  system-wide.
+- **Vendor libraries for building** - prints an env script pointing at
+  already-installed packages' own `opt/<pkg>` trees, so you can build
+  something against them without installing a `-dev` package system-wide.
 - **Respects packages the system already has** - before bundling a
   dependency, lapt checks if `dpkg` already provides it and reuses that
   instead of duplicating it. This keeps installs small and avoids two
@@ -68,14 +67,19 @@ curl 8.4.0
 
 ## Commands
 
-- `lapt install <pkg>` — bundle a package and its dependency closure into
+- `lapt install <pkg...>` — bundle a package and its dependency closure into
   `opt/<pkg>`, generating a wrapper and exposing its own binaries as needed.
-- `lapt remove <pkg>` — unlink a package's exposed files and delete its
-  `opt/<pkg>` tree.
-- `lapt list` — list installed packages.
-- `lapt vendor <target-dir> <pkg...>` — flatten a package closure's
-  libraries/headers/pkgconfig into a plain directory, for linking an external
-  build against.
+  Best-effort across multiple packages: failures are collected and reported
+  together, and don't stop the rest from installing.
+- `lapt remove <pkg...>` — unlink a package's exposed files and delete its
+  `opt/<pkg>` tree. Best-effort across multiple packages, same as `install`.
+- `lapt list [pkg...]` — list installed packages. With no arguments, lists
+  all of them; with names given, lists only those (silently skipping any
+  that aren't installed).
+- `lapt vendor <pkg...>` — print an env script (`PATH`,
+  `LD_LIBRARY_PATH`, `PKG_CONFIG_PATH`) pointing at already-installed
+  packages' own `opt/<pkg>` trees, for linking an external build against
+  them.
 - `lapt fix <pkg>` — re-check a package's system-satisfied dependencies
   against current `dpkg` state and re-bundle anything no longer satisfied.
 - `lapt prune` — reclaim cache entries no longer referenced by any installed

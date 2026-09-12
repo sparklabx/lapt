@@ -73,8 +73,41 @@ test_list_skips_incomplete_opt_dirs() {
   rm -rf "$HOME"; unset HOME
 }
 
+test_list_with_args_filters_to_named() {
+  export HOME; HOME=$(mktemp -d)
+  local opt_root="$HOME/.lapt/opt"
+  mkdir -p "$opt_root/curl/.lapt" "$opt_root/ripgrep/.lapt"
+  printf 'version=8.5.0\ninstalled=2024-01-01T00:00:00Z\n' > "$opt_root/curl/.lapt/version"
+  printf 'version=14.1.0\ninstalled=2024-01-02T00:00:00Z\n' > "$opt_root/ripgrep/.lapt/version"
+
+  local out
+  out=$("$LAPT" list ripgrep 2>&1)
+
+  assert_eq "list filtered to named pkg only" "ripgrep 14.1.0" "$out"
+
+  rm -rf "$HOME"; unset HOME
+}
+
+test_list_unmatched_name_silently_skipped() {
+  export HOME; HOME=$(mktemp -d)
+  local opt_root="$HOME/.lapt/opt"
+  mkdir -p "$opt_root/curl/.lapt"
+  printf 'version=8.5.0\ninstalled=2024-01-01T00:00:00Z\n' > "$opt_root/curl/.lapt/version"
+
+  local out rc
+  out=$("$LAPT" list curl nope 2>&1)
+  rc=$?
+
+  assert_eq "list exits 0 with an unmatched name" "0" "$rc"
+  assert_eq "unmatched name silently skipped" "curl 8.5.0" "$out"
+
+  rm -rf "$HOME"; unset HOME
+}
+
 test_list_on_empty_opt_is_silent
 test_list_prints_name_and_version_per_pkg
 test_list_strips_debian_point_release_suffix
 test_list_skips_incomplete_opt_dirs
+test_list_with_args_filters_to_named
+test_list_unmatched_name_silently_skipped
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

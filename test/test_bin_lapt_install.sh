@@ -358,6 +358,50 @@ test_exposure_collision_after_mv_keeps_opt_dir() {
   teardown_fakes
 }
 
+# multiple packages named, all succeed: each gets its own opt/<pkg>, exit 0
+test_multiple_pkgs_all_succeed() {
+  setup_fakes
+  fixture_leaf_pkg foo 1.0
+  fixture_leaf_pkg bar 2.0
+
+  local out rc
+  out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo bar 2>&1)
+  rc=$?
+
+  assert_exit0 "multi-pkg success exits 0: $out" "$rc"
+  assert_eq "foo installed" "real" "$(cat "$HOME/.lapt/opt/foo/bin/foo" 2>/dev/null)"
+  assert_eq "bar installed" "real" "$(cat "$HOME/.lapt/opt/bar/bin/bar" 2>/dev/null)"
+
+  teardown_fakes
+}
+
+# one of several named packages has no apt candidate: the others still get
+# installed (best-effort), but the overall exit is nonzero and the failure
+# names the broken package
+test_multiple_pkgs_partial_failure_still_installs_rest() {
+  setup_fakes
+  fixture_leaf_pkg foo 1.0
+  fixture_leaf_pkg bar 2.0
+  # no candidate fixture for "broken" -> apt-cache policy prints nothing
+
+  local out rc
+  out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo broken bar 2>&1)
+  rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    printf 'FAIL: %s\n  expected nonzero exit, got 0\n' "partial failure is reported nonzero"
+    fail=1
+  fi
+  assert_eq "foo still installed" "real" "$(cat "$HOME/.lapt/opt/foo/bin/foo" 2>/dev/null)"
+  assert_eq "bar still installed" "real" "$(cat "$HOME/.lapt/opt/bar/bin/bar" 2>/dev/null)"
+  case $out in
+    *broken*) ;;
+    *) printf 'FAIL: %s\n  expected failure output naming broken, got: %s\n' "failed pkg named in output" "$out"; fail=1 ;;
+  esac
+
+  teardown_fakes
+}
+
 test_already_installed_is_noop
 test_system_installed_is_noop
 test_library_only_install_succeeds_and_rewrites_pc
@@ -368,4 +412,6 @@ test_lib_dep_triggers_wrapper
 test_foreign_bin_dep_triggers_wrapper
 test_partial_failure_leaves_no_opt_dir
 test_exposure_collision_after_mv_keeps_opt_dir
+test_multiple_pkgs_all_succeed
+test_multiple_pkgs_partial_failure_still_installs_rest
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

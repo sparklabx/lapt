@@ -21,14 +21,18 @@ assert_exit0() {
 }
 
 HOME_DIR=""
+fixture_installed_pkg() {
+  local name=$1
+  local opt_dir="$HOME/.lapt/opt/$name"
+  mkdir -p "$opt_dir/bin" "$opt_dir/.lapt" "$HOME/.lapt/bin"
+  : > "$opt_dir/bin/$name"
+  ln -s "$opt_dir/bin/$name" "$HOME/.lapt/bin/$name"
+  printf 'version=1.0\ninstalled=2024-01-01T00:00:00Z\n' > "$opt_dir/.lapt/version"
+  printf 'bin/%s\n' "$name" > "$opt_dir/.lapt/exposed"
+}
 setup_fixture() {
   export HOME; HOME=$(mktemp -d)
-  local opt_dir="$HOME/.lapt/opt/foo"
-  mkdir -p "$opt_dir/bin" "$opt_dir/.lapt" "$HOME/.lapt/bin"
-  : > "$opt_dir/bin/foo"
-  ln -s "$opt_dir/bin/foo" "$HOME/.lapt/bin/foo"
-  printf 'version=1.0\ninstalled=2024-01-01T00:00:00Z\n' > "$opt_dir/.lapt/version"
-  printf 'bin/foo\n' > "$opt_dir/.lapt/exposed"
+  fixture_installed_pkg foo
 }
 teardown_fixture() {
   rm -rf "$HOME"
@@ -88,7 +92,54 @@ test_remove_does_not_touch_reclaimed_symlink() {
   teardown_fixture
 }
 
+# multiple packages named, all installed: each is removed, exit 0
+test_multiple_pkgs_all_removed() {
+  setup_fixture
+  fixture_installed_pkg bar
+
+  local out rc
+  out=$("$LAPT" remove foo bar 2>&1)
+  rc=$?
+
+  assert_exit0 "multi-pkg remove exits 0: $out" "$rc"
+  if [[ -e "$HOME/.lapt/opt/foo" || -e "$HOME/.lapt/opt/bar" ]]; then
+    printf 'FAIL: %s\n  expected both opt dirs removed\n' "both pkgs removed"
+    fail=1
+  fi
+
+  teardown_fixture
+}
+
+# one of several named packages was never installed: the others still get
+# removed (best-effort), but the overall exit is nonzero and the failure
+# names the missing package
+test_multiple_pkgs_partial_failure_still_removes_rest() {
+  setup_fixture
+  fixture_installed_pkg bar
+
+  local out rc
+  out=$("$LAPT" remove foo missing bar 2>&1)
+  rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    printf 'FAIL: %s\n  expected nonzero exit, got 0\n' "partial failure is reported nonzero"
+    fail=1
+  fi
+  if [[ -e "$HOME/.lapt/opt/foo" || -e "$HOME/.lapt/opt/bar" ]]; then
+    printf 'FAIL: %s\n  expected foo and bar still removed\n' "unaffected pkgs still removed"
+    fail=1
+  fi
+  case $out in
+    *missing*) ;;
+    *) printf 'FAIL: %s\n  expected failure output naming missing, got: %s\n' "failed pkg named in output" "$out"; fail=1 ;;
+  esac
+
+  teardown_fixture
+}
+
 test_remove_on_uninstalled_pkg_errors
 test_remove_deletes_opt_dir_and_unlinks_exposed_files
 test_remove_does_not_touch_reclaimed_symlink
+test_multiple_pkgs_all_removed
+test_multiple_pkgs_partial_failure_still_removes_rest
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi
