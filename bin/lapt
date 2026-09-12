@@ -11,6 +11,23 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 lapt::die() { echo "lapt: $*" >&2; exit 1; }
 lapt::warn() { echo "lapt: $*" >&2; }
 
+usage() {
+  cat <<'EOF'
+usage: lapt <command> [args]
+       lapt --help          show this help text
+
+commands:
+  install <pkg...>   install package(s)
+  remove <pkg...>    uninstall package(s)
+  list [pkg...]      list installed packages
+  vendor <pkg...>    use installed package(s) as build dependency
+  expose <pkg>       make an installed package available (binary, man page, etc.)
+  fix <pkg>          repair a package's system dependencies
+  prune              prune cache files
+  init               set up shell integration ($LAPT_HOME/env)
+EOF
+}
+
 LAPT_HOME="$HOME/.lapt"
 
 _install_one() {
@@ -292,6 +309,7 @@ EOF
 }
 
 case "${1:-}" in
+  ""|--help) usage; exit 0 ;;
   install) shift; cmd_install "$@" ;;
   expose) shift; cmd_expose "$@" ;;
   remove) shift; cmd_remove "$@" ;;
@@ -300,5 +318,5 @@ case "${1:-}" in
   vendor) shift; cmd_vendor "$@" ;;
   prune) shift; cmd_prune "$@" ;;
   init) shift; cmd_init "$@" ;;
-  *) lapt::die "unknown subcommand: ${1:-}" ;;
+  *) lapt::warn "unknown subcommand: $1"; usage >&2; exit 1 ;;
 esac
