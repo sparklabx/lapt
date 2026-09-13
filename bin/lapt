@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -u
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 . "$ROOT/lib/apt.sh"
 . "$ROOT/lib/bundle.sh"
 . "$ROOT/lib/expose.sh"
