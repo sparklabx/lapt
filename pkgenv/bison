@@ -1,0 +1,2 @@
+BISON_PKGDATADIR=share/bison
+M4=bin/m4

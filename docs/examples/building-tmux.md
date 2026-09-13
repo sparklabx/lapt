@@ -30,8 +30,14 @@ order given), which the process substitution above sources directly.
 If `bison` itself came from lapt rather than the system package, its own
 hardcoded defaults (`/usr/share/bison`, `/usr/bin/m4`) won't resolve — lapt
 doesn't put files at those absolute paths. `bison` runs *during* `make`
-(generating the parser from the grammar file), so export its own supported
-overrides before building, not after:
+(generating the parser from the grammar file), so it needs
+`BISON_PKGDATADIR`/`M4` set before building, not after.
+
+As of `pkgenv/bison` (see `docs/adr/0015-pkgenv-post-install-env-vars.md`),
+`lapt install bison` sets these automatically via the wrapper it generates
+around `opt/bison/bin/bison` — no manual export needed. If you're on an
+older `lapt` without `pkgenv/`, or `bison`'s wrapper predates that entry,
+run `lapt rewrap bison` to pick it up, or export it by hand:
 
 ```
 export BISON_PKGDATADIR="$HOME/.lapt/opt/bison/share/bison"
@@ -39,7 +45,7 @@ export M4="$HOME/.lapt/opt/bison/bin/m4"
 ```
 
 This is upstream bison's own behavior, unrelated to lapt's vendor/wrap
-machinery — only needed when `bison` itself is lapt-installed instead of
+machinery — only relevant when `bison` itself is lapt-installed instead of
 the system's.
 
 ## 4. Configure and build

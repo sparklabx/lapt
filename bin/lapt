@@ -23,6 +23,7 @@ commands:
   vendor <pkg...>    use installed package(s) as build dependency
   expose <pkg>       make an installed package available (binary, man page, etc.)
   fix <pkg>          repair a package's system dependencies
+  rewrap <pkg>       refresh an installed package's wrapper (e.g. after editing pkgenv/<pkg>)
   prune              prune cache files
   init               set up shell integration ($LAPT_HOME/env)
 EOF
@@ -267,6 +268,76 @@ cmd_fix() {
   return 0
 }
 
+cmd_rewrap() {
+  local pkg=$1
+  local opt_dir="$LAPT_HOME/opt/$pkg"
+  [[ -f "$opt_dir/.lapt/version" ]] || lapt::die "$pkg is not installed"
+
+  local version
+  version=$(sed -n 's/^version=//p' "$opt_dir/.lapt/version")
+
+  # Recover which of opt_dir's current bin/ files are pkg's own -- same
+  # trick cmd_fix uses (bin/lapt:220-263): a fresh bundle_manifest against
+  # just pkg's own cache entry tags the rel paths that belong to it, since a
+  # plain scan of opt_dir can't tell "pkg's own file" from "a dependency's
+  # file" once they're on disk together.
+  local own_manifest
+  own_manifest=$(lapt::bundle_manifest "$(mktemp -u -d)" "$pkg"$'\t'"$version"$'\t'"$pkg") \
+    || lapt::die "failed to recompute manifest for $pkg"
+
+  local -A own_bin=()
+  local rel src origin
+  while IFS=$'\t' read -r rel src origin; do
+    [[ $rel == bin/* ]] && own_bin[$rel]=1
+  done <<<"$own_manifest"
+
+  (( ${#own_bin[@]} > 0 )) || { echo "lapt: $pkg has no top-level bin/ files to wrap"; return 0; }
+
+  # Scan opt_dir as it stands right now (no new specs -- rewrap never
+  # fetches, that's fix's job) and re-tag pkg's own bin/ files' origin from
+  # "existing" to $pkg, same re-tagging cmd_fix does, so needs_wrapper can
+  # tell them apart from a dependency's bin/ files.
+  local full_manifest
+  full_manifest=$(lapt::bundle_manifest "$opt_dir") || lapt::die "failed to scan $opt_dir"
+
+  local wrap_manifest=""
+  while IFS=$'\t' read -r rel src origin; do
+    # bin/<name>.real is a wrapper artifact from a prior wrap, not real
+    # package content -- counting it as a foreign bin/ file would wrongly
+    # force a PATH export on every refresh of an already-wrapped package.
+    [[ $rel == *.real ]] && continue
+    [[ $origin == existing && -n ${own_bin[$rel]+x} ]] && origin=$pkg
+    wrap_manifest+="$rel"$'\t'"$src"$'\t'"$origin"$'\n'
+  done <<<"$full_manifest"
+
+  local wrapper_kind
+  wrapper_kind=$(printf '%s' "$wrap_manifest" | lapt::needs_wrapper "$pkg")
+  local lib_dir="" bin_dir=""
+  [[ $wrapper_kind == *lib* ]] && lib_dir="$opt_dir/lib"
+  [[ $wrapper_kind == *bin* ]] && bin_dir="$opt_dir/bin"
+
+  local already_wrapped=0
+  for rel in "${!own_bin[@]}"; do
+    [[ -e "$opt_dir/$rel.real" ]] && already_wrapped=1
+  done
+
+  if (( already_wrapped )); then
+    # Refresh in place: write_wrapper only overwrites the wrapper script,
+    # never touches .real, so it's safe to call again unconditionally.
+    for rel in "${!own_bin[@]}"; do
+      [[ -e "$opt_dir/$rel.real" ]] || continue
+      lapt::write_wrapper "$opt_dir/$rel" "$opt_dir/$rel.real" "$lib_dir" "$bin_dir" "$pkg" "$opt_dir" "$opt_dir"
+    done
+    echo "lapt: refreshed $pkg's wrapper"
+  elif [[ -n $wrapper_kind ]]; then
+    printf '%s' "$wrap_manifest" | lapt::wrap_top_level_bins "$opt_dir" "$opt_dir" "$pkg" "$lib_dir" "$bin_dir"
+    echo "lapt: wrapped $pkg"
+  else
+    echo "lapt: $pkg does not need a wrapper"
+  fi
+  return 0
+}
+
 cmd_vendor() {
   (( $# > 0 )) || lapt::die "usage: lapt vendor <pkg...>"
 
@@ -328,6 +399,7 @@ case "${1:-}" in
   remove) shift; cmd_remove "$@" ;;
   list) shift; cmd_list "$@" ;;
   fix) shift; cmd_fix "$@" ;;
+  rewrap) shift; cmd_rewrap "$@" ;;
   vendor) shift; cmd_vendor "$@" ;;
   prune) shift; cmd_prune "$@" ;;
   init) shift; cmd_init "$@" ;;

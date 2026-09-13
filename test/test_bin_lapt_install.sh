@@ -427,6 +427,63 @@ test_non_usr_content_is_bundled_and_noticed() {
   teardown_fakes
 }
 
+# pkgenv/file (checked into the repo) forces a wrapper even though "file"
+# has no lib/ and no foreign bin/ of its own -- otherwise the entry would be
+# dead code in the common case (see docs/adr/0015). The wrapper also
+# exports MAGIC, resolved to file's own bundled share/misc/magic.
+test_pkgenv_entry_forces_wrapper_with_no_lib_or_foreign_bin() {
+  setup_fakes
+  printf '%s\n' "file" > "$FIXTURE_DIR/closure/file"
+  printf '%s' "1.0" > "$FIXTURE_DIR/candidate/file"
+  printf -- '-rwxr-xr-x root/root 4 2024-01-01 00:00 ./usr/bin/file\n-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/share/misc/magic\n' \
+    > "$FIXTURE_DIR/deb_contents/file_1.0"
+  mkdir -p "$FIXTURE_DIR/extract/file_1.0/usr/bin" "$FIXTURE_DIR/extract/file_1.0/usr/share/misc"
+  printf 'real' > "$FIXTURE_DIR/extract/file_1.0/usr/bin/file"
+  printf 'magic' > "$FIXTURE_DIR/extract/file_1.0/usr/share/misc/magic"
+
+  local out rc
+  out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install file 2>&1)
+  rc=$?
+  local opt_dir="$HOME/.lapt/opt/file"
+
+  assert_exit0 "pkgenv-forced install exits 0: $out" "$rc"
+  assert_eq "real binary moved aside" "real" "$(cat "$opt_dir/bin/file.real" 2>/dev/null)"
+  assert_eq "wrapper exports MAGIC resolved under opt_dir" \
+    "$(printf '#!/bin/sh\nexport MAGIC="%s/share/misc/magic"\nexec "%s" "$@"' "$opt_dir" "$opt_dir/bin/file.real")" \
+    "$(cat "$opt_dir/bin/file" 2>/dev/null)"
+
+  teardown_fakes
+}
+
+# pkgenv/bison declares both BISON_PKGDATADIR and M4; here bison's dependency
+# m4 is system-satisfied (skipped, never bundled -- see
+# test_system_satisfied_dep_is_skipped above), so bin/m4 never lands in
+# opt/bison. The M4 export line is skipped, not exported pointing at a
+# nonexistent file.
+test_pkgenv_entry_skips_line_for_unresolvable_path() {
+  setup_fakes
+  printf 'bison\n  Depends: m4\nm4\n' > "$FIXTURE_DIR/closure/bison"
+  printf '%s' "1.0" > "$FIXTURE_DIR/candidate/bison"
+  printf '%s' "1.0" > "$FIXTURE_DIR/dpkg_status/m4"
+  printf -- '-rwxr-xr-x root/root 4 2024-01-01 00:00 ./usr/bin/bison\n-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/share/bison/m4sugar.m4\n' \
+    > "$FIXTURE_DIR/deb_contents/bison_1.0"
+  mkdir -p "$FIXTURE_DIR/extract/bison_1.0/usr/bin" "$FIXTURE_DIR/extract/bison_1.0/usr/share/bison"
+  printf 'real' > "$FIXTURE_DIR/extract/bison_1.0/usr/bin/bison"
+  printf 'sugar' > "$FIXTURE_DIR/extract/bison_1.0/usr/share/bison/m4sugar.m4"
+
+  local out rc
+  out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install bison 2>&1)
+  rc=$?
+  local opt_dir="$HOME/.lapt/opt/bison"
+
+  assert_exit0 "bison install exits 0: $out" "$rc"
+  assert_eq "wrapper exports BISON_PKGDATADIR only, M4 line skipped" \
+    "$(printf '#!/bin/sh\nexport BISON_PKGDATADIR="%s/share/bison"\nexec "%s" "$@"' "$opt_dir" "$opt_dir/bin/bison.real")" \
+    "$(cat "$opt_dir/bin/bison" 2>/dev/null)"
+
+  teardown_fakes
+}
+
 test_already_installed_is_noop
 test_system_installed_is_noop
 test_library_only_install_succeeds_and_rewrites_pc
@@ -440,4 +497,6 @@ test_partial_failure_leaves_no_opt_dir
 test_exposure_collision_after_mv_keeps_opt_dir
 test_multiple_pkgs_all_succeed
 test_multiple_pkgs_partial_failure_still_installs_rest
+test_pkgenv_entry_forces_wrapper_with_no_lib_or_foreign_bin
+test_pkgenv_entry_skips_line_for_unresolvable_path
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

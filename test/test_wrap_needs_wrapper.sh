@@ -42,8 +42,25 @@ test_both_triggers_both_tokens() {
   assert_eq "both tokens printed" "$(printf 'lib\nbin')" "$out"
 }
 
+# a pkgenv/<pkg> entry forces a wrapper even with no lib/ and no foreign
+# bin/ -- the "file" case (bundles no lib/, only its own usr/bin/file)
+test_pkgenv_entry_forces_wrapper() {
+  local out
+  out=$(printf 'bin/file\t/x\tfile\n' | lapt::needs_wrapper "file")
+  assert_eq "pkgenv presence forces a wrapper token" "pkgenv" "$out"
+}
+
+# no pkgenv/<pkg> entry: unaffected, same as before
+test_no_pkgenv_entry_no_extra_token() {
+  local out
+  out=$(printf 'bin/mytool\t/x\tmytool\n' | lapt::needs_wrapper "mytool")
+  assert_eq "no pkgenv entry adds nothing" "" "$out"
+}
+
 test_own_bin_only_not_needed
 test_lib_file_triggers_lib
 test_foreign_bin_triggers_bin
 test_both_triggers_both_tokens
+test_pkgenv_entry_forces_wrapper
+test_no_pkgenv_entry_no_extra_token
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

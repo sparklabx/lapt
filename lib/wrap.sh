@@ -9,6 +9,7 @@ lapt::needs_wrapper() {
   done
   [[ $has_lib == 1 ]] && echo lib
   [[ $has_bin == 1 ]] && echo bin
+  [[ -f "$ROOT/pkgenv/$pkg" ]] && echo pkgenv
 }
 
 lapt::wrap_top_level_bins() {
@@ -17,16 +18,43 @@ lapt::wrap_top_level_bins() {
   while IFS=$'\t' read -r rel src origin; do
     [[ $origin == "$pkg" && $rel == bin/* ]] || continue
     mv "$work_dir/$rel" "$work_dir/$rel.real"
-    lapt::write_wrapper "$work_dir/$rel" "$opt_dir/$rel.real" "$lib_dir" "$bin_dir"
+    lapt::write_wrapper "$work_dir/$rel" "$opt_dir/$rel.real" "$lib_dir" "$bin_dir" "$pkg" "$work_dir" "$opt_dir"
   done
 }
 
+# pkgenv/<pkg>, if present, is a declarative VAR=relative/path list (never
+# shell) of post-install env vars a package's compiled-in defaults need
+# (e.g. git's GIT_EXEC_PATH) -- see docs/adr/0015. A line is skipped if its
+# resolved path doesn't exist, so a dependency that turned out to be
+# system-satisfied (and so was never bundled) doesn't leave a wrapper
+# exporting a broken path. check_dir is where the files physically live
+# right now (existence is tested there); final_dir is what the exported
+# value points at -- during install these differ (work_dir vs. the not-yet-
+# existing opt_dir the mv will land on, same split bundle_apply's
+# dest_dir/final_dir already makes), while a same-dir refresh (rewrap) passes
+# the same path for both.
+lapt::pkgenv_lines() {
+  local pkg=$1 check_dir=$2 final_dir=$3
+  [[ -n $pkg ]] || return 0
+  local pkgenv_file="$ROOT/pkgenv/$pkg"
+  [[ -f $pkgenv_file ]] || return 0
+  local line var relpath
+  while IFS= read -r line; do
+    [[ -z $line ]] && continue
+    var=${line%%=*}
+    relpath=${line#*=}
+    [[ -e "$check_dir/$relpath" ]] || continue
+    printf 'export %s="%s"\n' "$var" "$final_dir/$relpath"
+  done < "$pkgenv_file"
+}
+
 lapt::write_wrapper() {
-  local script_path=$1 exec_target=$2 lib_dir=$3 bin_dir=$4
+  local script_path=$1 exec_target=$2 lib_dir=$3 bin_dir=$4 pkg=${5:-} check_dir=${6:-} final_dir=${7:-}
   {
     echo '#!/bin/sh'
     [[ -n $lib_dir ]] && printf 'export LD_LIBRARY_PATH="%s:$LD_LIBRARY_PATH"\n' "$lib_dir"
     [[ -n $bin_dir ]] && printf 'export PATH="%s:$PATH"\n' "$bin_dir"
+    lapt::pkgenv_lines "$pkg" "$check_dir" "$final_dir"
     printf 'exec "%s" "$@"\n' "$exec_target"
   } > "$script_path"
   chmod +x "$script_path"

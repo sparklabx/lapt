@@ -7,7 +7,7 @@ version=${1:?usage: ./release.sh <version>}
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tarball="lapt-${version}.tar.gz"
 
-tar czf "$tarball" -C "$root" bin lib
+tar czf "$tarball" -C "$root" bin lib pkgenv
 if gh release view "$version" >/dev/null 2>&1; then
   gh release upload "$version" "$tarball" --clobber
 else
