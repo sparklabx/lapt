@@ -402,11 +402,37 @@ test_multiple_pkgs_partial_failure_still_installs_rest() {
   teardown_fakes
 }
 
+# a package with content outside bin/lib/share (here: usr/bin plus a
+# top-level etc/ file, previously impossible -- cache_ensure used to
+# hard-abort on any file outside usr/) installs fine, hardlinks the etc/
+# file into opt/<pkg>, and prints a one-line notice naming the unexposed dir
+test_non_usr_content_is_bundled_and_noticed() {
+  setup_fakes
+  fixture_leaf_pkg foo 1.0
+  mkdir -p "$FIXTURE_DIR/extract/foo_1.0/etc"
+  printf 'conf' > "$FIXTURE_DIR/extract/foo_1.0/etc/foo.conf"
+
+  local out rc
+  out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install foo 2>&1)
+  rc=$?
+  local opt_dir="$HOME/.lapt/opt/foo"
+
+  assert_exit0 "non-usr content install exits 0: $out" "$rc"
+  assert_eq "etc/ content hardlinked into opt/" "conf" "$(cat "$opt_dir/etc/foo.conf" 2>/dev/null)"
+  case $out in
+    *"also has etc/"*) ;;
+    *) printf 'FAIL: %s\n  expected notice naming etc/, got: %s\n' "unexposed-dir notice" "$out"; fail=1 ;;
+  esac
+
+  teardown_fakes
+}
+
 test_already_installed_is_noop
 test_system_installed_is_noop
 test_library_only_install_succeeds_and_rewrites_pc
 test_install_happy_path_no_deps
 test_system_satisfied_dep_is_skipped
+test_non_usr_content_is_bundled_and_noticed
 test_unsatisfied_dep_is_fetched_and_bundled
 test_lib_dep_triggers_wrapper
 test_foreign_bin_dep_triggers_wrapper

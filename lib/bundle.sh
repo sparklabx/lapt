@@ -16,7 +16,14 @@ lapt::bundle_manifest() {
     IFS=$'\t' read -r name version origin <<<"$spec"
     cache_path=$(lapt::cache_entry_path "$name" "$version")
     while IFS= read -r -d '' f; do
-      rel=${f#"$cache_path"/usr/}
+      # usr/ is stripped so usr/bin, usr/lib, usr/sbin land at the same rel
+      # path as a top-level bin/, lib/, sbin/ would -- one flattened
+      # location per category regardless of which prefix a package used.
+      if [[ $f == "$cache_path"/usr/* ]]; then
+        rel=${f#"$cache_path"/usr/}
+      else
+        rel=${f#"$cache_path"/}
+      fi
       if [[ $rel =~ ^(lib|include|pkgconfig)/[a-z0-9_]+-linux-gnu[a-z0-9]*/(.*)$ ]]; then
         rel="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
       fi

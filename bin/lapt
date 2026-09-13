@@ -106,6 +106,19 @@ _install_one() {
   # removable package, just not fully exposed to $PATH/man yet.
   printf '%s\n' "$manifest" | lapt::expose_add "$pkg" > "$opt_dir/.lapt/exposed" \
     || echo "lapt: $pkg installed at $opt_dir, but some files could not be exposed (see warnings above) -- run 'lapt expose $pkg' to retry"
+
+  # bin/lib/share are the only categories exposure/wrap.sh do anything with;
+  # note any other top-level dir (etc, sbin, ...) so it isn't a silent no-op.
+  local -A unhandled=()
+  local rel _src _origin dir
+  while IFS=$'\t' read -r rel _src _origin; do
+    dir=${rel%%/*}
+    case $dir in bin|lib|share) ;; *) unhandled[$dir]=1 ;; esac
+  done <<<"$manifest"
+  for dir in "${!unhandled[@]}"; do
+    echo "lapt: $pkg also has $dir/ under $opt_dir -- bundled but not exposed"
+  done
+
   return 0
 }
 

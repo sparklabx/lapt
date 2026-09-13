@@ -174,9 +174,63 @@ test_symlink_in_cache_entry_is_a_row() {
   rm -rf "$LAPT_HOME" "$dest"
 }
 
+# a root-level path with no usr/ prefix (e.g. /etc/foo.conf) keeps its
+# natural relative path -- lapt no longer requires every file live under usr/
+test_root_level_path_keeps_natural_rel() {
+  setup_cache
+  local dest; dest=$(mktemp -d)
+  mkdir -p "$LAPT_HOME/cache/foo_1.0/etc"
+  : > "$LAPT_HOME/cache/foo_1.0/etc/foo.conf"
+
+  local out
+  out=$(lapt::bundle_manifest "$dest" "foo"$'\t'"1.0"$'\t'"foo")
+  assert_eq "root-level file manifest row" \
+    "etc/foo.conf	$LAPT_HOME/cache/foo_1.0/etc/foo.conf	foo" \
+    "$out"
+
+  rm -rf "$LAPT_HOME" "$dest"
+}
+
+# a root-level bin/ file and a usr/bin/ file land at the same rel path --
+# root and usr variants of bin/lib/sbin merge into one flattened location
+test_root_bin_merges_with_usr_bin() {
+  setup_cache
+  local dest; dest=$(mktemp -d)
+  mkdir -p "$LAPT_HOME/cache/foo_1.0/bin"
+  : > "$LAPT_HOME/cache/foo_1.0/bin/foo"
+
+  local out
+  out=$(lapt::bundle_manifest "$dest" "foo"$'\t'"1.0"$'\t'"foo")
+  assert_eq "root bin/ rel path matches usr/bin/ rel path" \
+    "bin/foo	$LAPT_HOME/cache/foo_1.0/bin/foo	foo" \
+    "$out"
+
+  rm -rf "$LAPT_HOME" "$dest"
+}
+
+# multiarch triplet stripping applies the same way to a root-level lib/ as it
+# already does to usr/lib/
+test_multiarch_triplet_under_root_lib_stripped() {
+  setup_cache
+  local dest; dest=$(mktemp -d)
+  mkdir -p "$LAPT_HOME/cache/foo_1.0/lib/x86_64-linux-gnu"
+  : > "$LAPT_HOME/cache/foo_1.0/lib/x86_64-linux-gnu/libfoo.so.1"
+
+  local out
+  out=$(lapt::bundle_manifest "$dest" "foo"$'\t'"1.0"$'\t'"foo")
+  assert_eq "root-level multiarch lib manifest row" \
+    "lib/libfoo.so.1	$LAPT_HOME/cache/foo_1.0/lib/x86_64-linux-gnu/libfoo.so.1	foo" \
+    "$out"
+
+  rm -rf "$LAPT_HOME" "$dest"
+}
+
 test_single_file_strips_usr
 test_epoch_version_with_colon_is_preserved
 test_multiarch_triplet_under_lib_stripped
+test_root_level_path_keeps_natural_rel
+test_root_bin_merges_with_usr_bin
+test_multiarch_triplet_under_root_lib_stripped
 test_two_members_no_collision
 test_collision_between_members_aborts
 test_existing_dest_file_is_a_row
