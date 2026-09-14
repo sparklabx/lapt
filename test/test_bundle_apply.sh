@@ -19,7 +19,7 @@ assert_eq() {
 test_plain_file_is_hardlinked() {
   local cache dest; cache=$(mktemp -d); dest=$(mktemp -d)
   : > "$cache/foo"
-  printf 'bin/foo\t%s\tfoo\n' "$cache/foo" | lapt::bundle_apply "$dest" 0
+  printf 'bin/foo\t%s\tfoo\n' "$cache/foo" | lapt::bundle_apply "$dest"
 
   local src_inode dest_inode
   src_inode=$(stat -c %i "$cache/foo")
@@ -33,7 +33,7 @@ test_plain_file_is_hardlinked() {
 test_nested_dest_path_creates_dirs() {
   local cache dest; cache=$(mktemp -d); dest=$(mktemp -d)
   : > "$cache/libfoo.so.1"
-  printf 'lib/sub/libfoo.so.1\t%s\tfoo\n' "$cache/libfoo.so.1" | lapt::bundle_apply "$dest" 0
+  printf 'lib/sub/libfoo.so.1\t%s\tfoo\n' "$cache/libfoo.so.1" | lapt::bundle_apply "$dest"
 
   local src_inode dest_inode
   src_inode=$(stat -c %i "$cache/libfoo.so.1")
@@ -51,7 +51,7 @@ test_existing_row_is_skipped() {
   local before_inode
   before_inode=$(stat -c %i "$dest/bin/already-there")
 
-  printf 'bin/already-there\t%s\texisting\n' "$dest/bin/already-there" | lapt::bundle_apply "$dest" 0
+  printf 'bin/already-there\t%s\texisting\n' "$dest/bin/already-there" | lapt::bundle_apply "$dest"
   local rc=$?
 
   assert_eq "existing row does not error" "0" "$rc"
@@ -62,8 +62,8 @@ test_existing_row_is_skipped() {
   rm -rf "$cache" "$dest"
 }
 
-# rewrite-pc=1: a .pc file is copied (independent inode) with prefix/libdir/includedir rewritten
-test_pc_file_copied_and_rewritten_when_flagged() {
+# a .pc file is copied (independent inode) with prefix/libdir/includedir rewritten
+test_pc_file_copied_and_rewritten() {
   local cache dest; cache=$(mktemp -d); dest=$(mktemp -d)
   cat > "$cache/foo.pc" <<'EOF'
 prefix=/usr
@@ -74,7 +74,7 @@ Version: 1.0
 Libs: -L${libdir} -lfoo
 Cflags: -I${includedir}
 EOF
-  printf 'pkgconfig/foo.pc\t%s\tfoo\n' "$cache/foo.pc" | lapt::bundle_apply "$dest" 1
+  printf 'pkgconfig/foo.pc\t%s\tfoo\n' "$cache/foo.pc" | lapt::bundle_apply "$dest"
 
   local src_inode dest_inode
   src_inode=$(stat -c %i "$cache/foo.pc")
@@ -92,23 +92,8 @@ EOF
   rm -rf "$cache" "$dest"
 }
 
-# rewrite-pc=0: a .pc file is hardlinked as-is, same as any other file (assemble path)
-test_pc_file_hardlinked_when_not_flagged() {
-  local cache dest; cache=$(mktemp -d); dest=$(mktemp -d)
-  : > "$cache/foo.pc"
-  printf 'pkgconfig/foo.pc\t%s\tfoo\n' "$cache/foo.pc" | lapt::bundle_apply "$dest" 0
-
-  local src_inode dest_inode
-  src_inode=$(stat -c %i "$cache/foo.pc")
-  dest_inode=$(stat -c %i "$dest/pkgconfig/foo.pc" 2>/dev/null || echo missing)
-  assert_eq "pc file hardlinked when rewrite-pc=0" "$src_inode" "$dest_inode"
-
-  rm -rf "$cache" "$dest"
-}
-
 test_plain_file_is_hardlinked
 test_nested_dest_path_creates_dirs
 test_existing_row_is_skipped
-test_pc_file_copied_and_rewritten_when_flagged
-test_pc_file_hardlinked_when_not_flagged
+test_pc_file_copied_and_rewritten
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

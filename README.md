@@ -18,7 +18,8 @@ from source. Under the hood it's a thin wrapper around `apt-get download` +
   dependency, lapt checks if `dpkg` already provides it and reuses that
   instead of duplicating it. This keeps installs small and avoids two
   copies of the same library drifting apart. If the system copy later gets
-  removed, `lapt fix <pkg>` detects the gap and bundles a replacement.
+  removed, reinstalling (`lapt remove <pkg> && lapt install <pkg>`) bundles
+  a replacement.
 - **Patches up compiled-in absolute paths** - a few packages (`git`, `file`,
   `bison`) hardcode default paths like `/usr/lib/git-core` that break once
   relocated into `opt/<pkg>/`. `pkgenv/<pkg>` declares the env vars each one
@@ -84,8 +85,6 @@ curl 8.4.0
   `LD_LIBRARY_PATH`, `PKG_CONFIG_PATH`) pointing at already-installed
   packages' own `opt/<pkg>` trees, for linking an external build against
   them.
-- `lapt fix <pkg>` — re-check a package's system-satisfied dependencies
-  against current `dpkg` state and re-bundle anything no longer satisfied.
 - `lapt rewrap <pkg>` — refresh an installed package's wrapper in place
   (e.g. after adding or editing its `pkgenv/<pkg>` entry), without
   reinstalling.

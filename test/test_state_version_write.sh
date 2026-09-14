@@ -31,7 +31,7 @@ test_writes_version_and_installed_lines() {
   rm -rf "$opt"
 }
 
-# a re-write (e.g. fix regenerating) overwrites rather than appends
+# a re-write (e.g. reinstalling) overwrites rather than appends
 test_rewrite_overwrites_not_appends() {
   local opt; opt=$(mktemp -d)
   lapt::version_write "$opt" "1.0.0"
