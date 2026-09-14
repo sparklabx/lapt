@@ -61,4 +61,6 @@ editing a `pkgenv/$pkg` entry) without requiring a reinstall. Reuses
 `cmd_fix`'s existing-scan re-tagging trick (`bin/lapt`, `cmd_fix`) to tell
 a package's own `bin/` files apart from a dependency's once they're
 already on disk together, but does no fetching of its own — it only
-recomputes from what's currently bundled in `opt/<pkg>/`.
+recomputes from what's currently bundled in `opt/<pkg>/`. (`fix` itself
+was later removed, see ADR-0016 — `cmd_rewrap` keeps its own copy of this
+trick.)

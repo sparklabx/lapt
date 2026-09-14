@@ -40,13 +40,13 @@ lapt::bundle_manifest() {
 }
 
 lapt::bundle_apply() {
-  local dest_dir=$1 rewrite_pc=$2 final_dir=${3:-$1}
+  local dest_dir=$1 final_dir=${2:-$1}
   local rel src origin dest
   while IFS=$'\t' read -r rel src origin; do
     [[ $origin == existing ]] && continue
     dest="$dest_dir/$rel"
     mkdir -p "$(dirname "$dest")"
-    if [[ $rewrite_pc == 1 && $rel == *.pc ]]; then
+    if [[ $rel == *.pc ]]; then
       # Most .pc files reference ${libdir}/${includedir} in Libs:/Cflags: and
       # need no further rewrite once those variables are fixed above. A few
       # (e.g. Debian's ncurses.pc) hardcode an absolute -L/-I path directly in

@@ -110,7 +110,7 @@ test_collision_between_members_aborts() {
   rm -rf "$LAPT_HOME" "$dest"
 }
 
-# pre-existing dest-dir file is included as an "existing" row (fix's append case)
+# pre-existing dest-dir file is included as an "existing" row
 test_existing_dest_file_is_a_row() {
   setup_cache
   local dest; dest=$(mktemp -d)

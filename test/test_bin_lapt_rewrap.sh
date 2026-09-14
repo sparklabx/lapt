@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Subprocess tests for bin/lapt, seam: `lapt rewrap <pkg>` only. rewrap never
-# fetches (that's fix's job) -- it only reads opt_dir and pkg's own cache
-# entry, both already on disk, so no fake apt-get/dpkg/dpkg-deb is needed.
+# fetches -- it only reads opt_dir and pkg's own cache entry, both already
+# on disk, so no fake apt-get/dpkg/dpkg-deb is needed.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

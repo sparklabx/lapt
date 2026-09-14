@@ -137,8 +137,8 @@ test_system_installed_is_noop() {
 
 # top-level package has no own usr/bin (only usr/lib + a pkgconfig file):
 # install succeeds anyway (ADR-0012 drops the old hard-abort), and the .pc
-# file is rewritten to point at opt/<pkg> (rewrite_pc is now unconditional
-# for install, same mechanism vendor already used)
+# file is rewritten to point at opt/<pkg> (bundle_apply's .pc rewrite is
+# unconditional, same mechanism vendor already used)
 test_library_only_install_succeeds_and_rewrites_pc() {
   setup_fakes
   printf '%s\n' "foo" > "$FIXTURE_DIR/closure/foo"
@@ -186,7 +186,7 @@ test_install_happy_path_no_deps() {
 }
 
 # non-top-level dep already system-satisfied: skipped entirely (not fetched,
-# not bundled into opt/), recorded to .lapt/system-deps
+# not bundled into opt/)
 test_system_satisfied_dep_is_skipped() {
   setup_fakes
   fixture_leaf_pkg foo 1.0
@@ -204,14 +204,12 @@ test_system_satisfied_dep_is_skipped() {
     printf 'FAIL: %s\n  expected libbar never fetched/cached, found a cache entry\n' "system-satisfied dep is never fetched"
     fail=1
   fi
-  assert_eq "system-satisfied dep recorded" "libbar 2.0" "$(cat "$opt_dir/.lapt/system-deps" 2>/dev/null)"
 
   teardown_fakes
 }
 
 # non-top-level dep not system-satisfied (not installed anywhere): fetched
-# and bundled into opt/<pkg>/, flattened (usr/ stripped), NOT recorded to
-# .lapt/system-deps (it's actually bundled, not skipped). This dep only
+# and bundled into opt/<pkg>/, flattened (usr/ stripped). This dep only
 # contributes a share/ file -- no lib/, no foreign bin/ -- so no wrapper is
 # triggered (wrapper generation is a later slice).
 test_unsatisfied_dep_is_fetched_and_bundled() {
@@ -231,7 +229,6 @@ test_unsatisfied_dep_is_fetched_and_bundled() {
 
   assert_exit0 "unsatisfied dep install exits 0: $out" "$rc"
   assert_eq "dep content bundled and flattened" "data" "$(cat "$opt_dir/share/databar/data.txt" 2>/dev/null)"
-  assert_eq "bundled dep not recorded as system-satisfied" "" "$(cat "$opt_dir/.lapt/system-deps" 2>/dev/null)"
 
   teardown_fakes
 }

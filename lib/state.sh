@@ -7,8 +7,3 @@ lapt::version_write() {
   } > "$opt_dir/.lapt/version"
 }
 
-lapt::system_deps_write() {
-  local opt_dir=$1
-  mkdir -p "$opt_dir/.lapt"
-  cat > "$opt_dir/.lapt/system-deps"
-}
