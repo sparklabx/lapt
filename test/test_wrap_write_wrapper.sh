@@ -66,8 +66,92 @@ test_both_dirs_both_lines() {
   rm -rf "$dir"
 }
 
+# pkgenv/git says GIT_EXEC_PATH=lib/git-core; opt_dir has that path, so the
+# wrapper exports it, resolved to an absolute path under opt_dir
+test_pkgenv_entry_adds_export() {
+  local dir; dir=$(mktemp -d)
+  mkdir -p "$dir/opt/lib/git-core"
+
+  lapt::write_wrapper "$dir/w" "/opt/git/bin/git.real" "" "" "git" "$dir/opt" "$dir/opt"
+
+  assert_eq "wrapper content" \
+    "$(printf '#!/bin/sh\nexport GIT_EXEC_PATH="%s/lib/git-core"\nexec "/opt/git/bin/git.real" "$@"' "$dir/opt")" \
+    "$(cat "$dir/w")"
+
+  rm -rf "$dir"
+}
+
+# pkgenv/bison has two lines (BISON_PKGDATADIR, M4); opt_dir only has the
+# share/bison path (M4's bin/m4 is missing, e.g. system-satisfied and never
+# bundled) -- the M4 line is skipped (not exported broken) but must warn,
+# not fail silently, so a bad pkgenv path doesn't go unnoticed
+test_pkgenv_entry_skips_missing_path() {
+  local dir; dir=$(mktemp -d)
+  mkdir -p "$dir/opt/share/bison"
+
+  local err
+  err=$(lapt::write_wrapper "$dir/w" "/opt/bison/bin/bison.real" "" "" "bison" "$dir/opt" "$dir/opt" 2>&1 >/dev/null)
+
+  assert_eq "wrapper content" \
+    "$(printf '#!/bin/sh\nexport BISON_PKGDATADIR="%s/share/bison"\nexec "/opt/bison/bin/bison.real" "$@"' "$dir/opt")" \
+    "$(cat "$dir/w")"
+  case $err in
+    *"M4"*"bin/m4"*) ;;
+    *) printf 'FAIL: %s\n  expected warning naming M4=bin/m4, got: %s\n' "missing pkgenv path warns" "$err"; fail=1 ;;
+  esac
+
+  rm -rf "$dir"
+}
+
+# no pkg/opt_dir given (existing 4-arg callers): no pkgenv lines added
+test_no_pkg_given_no_pkgenv_lines() {
+  local dir; dir=$(mktemp -d)
+  lapt::write_wrapper "$dir/w" "/opt/pkg/bin/pkg" "" ""
+
+  assert_eq "wrapper content" \
+    "$(printf '#!/bin/sh\nexec "/opt/pkg/bin/pkg" "$@"')" \
+    "$(cat "$dir/w")"
+
+  rm -rf "$dir"
+}
+
+# packages that ship private libs at lib/<pkg>/ (Debian policy's recommended
+# /usr/lib/<package-name>/ convention for private support files) -- the
+# subdir is named after pkg, and the returned path is built from final_dir
+# (not check_dir): install-time calls check_dir=work_dir/lib while the
+# wrapper's baked-in value must say opt_dir/lib.
+test_lib_dir_list_finds_private_pkg_subdir() {
+  local dir; dir=$(mktemp -d)
+  mkdir -p "$dir/check/scanmem"
+
+  assert_eq "lib dirs, check_dir == final_dir" \
+    "$dir/check:$dir/check/scanmem" \
+    "$(lapt::lib_dir_list "$dir/check" "$dir/check" "scanmem")"
+  assert_eq "lib dirs, check_dir != final_dir" \
+    "/opt/final:/opt/final/scanmem" \
+    "$(lapt::lib_dir_list "$dir/check" "/opt/final" "scanmem")"
+
+  rm -rf "$dir"
+}
+
+# no lib/<pkg>/ subdir (the common case -- most packages don't ship private
+# libs): just the root, no trailing colon
+test_lib_dir_list_no_private_subdir_is_just_root() {
+  local dir; dir=$(mktemp -d)
+  mkdir -p "$dir/check"
+
+  assert_eq "no private subdir" "$dir/check" "$(lapt::lib_dir_list "$dir/check" "$dir/check" "scanmem")"
+
+  rm -rf "$dir"
+}
+
 test_no_dirs_just_exec
 test_lib_dir_adds_ld_library_path
 test_bin_dir_adds_path
 test_both_dirs_both_lines
+test_pkgenv_entry_adds_export
+test_pkgenv_entry_skips_missing_path
+test_no_pkg_given_no_pkgenv_lines
+test_lib_dir_list_finds_private_pkg_subdir
+test_lib_dir_list_no_private_subdir_is_just_root
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

@@ -22,24 +22,6 @@ lapt::cache_ensure() {
   fi
   local debfile; debfile=$(printf '%s\n' "$scratch"/*.deb)
 
-  local fields path
-  while read -r -a fields; do
-    # directories outside usr/ are inert scaffolding: bundle_manifest only
-    # ever walks -type f from a cache entry, so an empty dir here is never
-    # read or flattened. CONTEXT.md's Scope-restricted package definition is
-    # "every file under usr/**" -- only actual files are checked.
-    [[ ${fields[0]:0:1} == d ]] && continue
-    path=${fields[5]}
-    case $path in
-      ./|./usr|./usr/*) ;;
-      *)
-        echo "lapt: error: $name $version has a file outside usr/: $path" >&2
-        rm -rf "$scratch"
-        return 1
-        ;;
-    esac
-  done < <(dpkg-deb -c "$debfile")
-
   local parent tmp
   parent=$(dirname "$entry")
   mkdir -p "$parent"
