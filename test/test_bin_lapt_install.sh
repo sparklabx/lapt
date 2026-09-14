@@ -486,6 +486,36 @@ test_pkgenv_entry_skips_line_for_unresolvable_path() {
   teardown_fakes
 }
 
+# packages that ship private libs at lib/<pkg>/ -- Debian policy's recommended
+# /usr/lib/<package-name>/ convention for support files not meant to be
+# invoked/linked by anything outside the package. LD_LIBRARY_PATH must list
+# both opt_dir/lib and that subdir, or the wrapped binary fails at runtime
+# with "cannot open shared object file" even though the .so is bundled right
+# there.
+test_private_lib_pkg_subdir_included_in_ld_library_path() {
+  setup_fakes
+  printf '%s\n' "scanmem" > "$FIXTURE_DIR/closure/scanmem"
+  printf '%s' "1.0" > "$FIXTURE_DIR/candidate/scanmem"
+  printf -- '-rwxr-xr-x root/root 4 2024-01-01 00:00 ./usr/bin/scanmem\n-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/lib/scanmem/libscanmem.so.1\n' \
+    > "$FIXTURE_DIR/deb_contents/scanmem_1.0"
+  mkdir -p "$FIXTURE_DIR/extract/scanmem_1.0/usr/bin" "$FIXTURE_DIR/extract/scanmem_1.0/usr/lib/scanmem"
+  printf 'real' > "$FIXTURE_DIR/extract/scanmem_1.0/usr/bin/scanmem"
+  printf 'lib' > "$FIXTURE_DIR/extract/scanmem_1.0/usr/lib/scanmem/libscanmem.so.1"
+
+  local out rc
+  out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install scanmem 2>&1)
+  rc=$?
+  local opt_dir="$HOME/.lapt/opt/scanmem"
+
+  assert_exit0 "private-lib-subdir install exits 0: $out" "$rc"
+  assert_eq "real binary moved aside" "real" "$(cat "$opt_dir/bin/scanmem.real" 2>/dev/null)"
+  assert_eq "wrapper's LD_LIBRARY_PATH lists both lib/ and lib/scanmem" \
+    "$(printf '#!/bin/sh\nexport LD_LIBRARY_PATH="%s/lib:%s/lib/scanmem:$LD_LIBRARY_PATH"\nexec "%s" "$@"' "$opt_dir" "$opt_dir" "$opt_dir/bin/scanmem.real")" \
+    "$(cat "$opt_dir/bin/scanmem" 2>/dev/null)"
+
+  teardown_fakes
+}
+
 test_already_installed_is_noop
 test_system_installed_is_noop
 test_library_only_install_succeeds_and_rewrites_pc
@@ -501,4 +531,5 @@ test_multiple_pkgs_all_succeed
 test_multiple_pkgs_partial_failure_still_installs_rest
 test_pkgenv_entry_forces_wrapper_with_no_lib_or_foreign_bin
 test_pkgenv_entry_skips_line_for_unresolvable_path
+test_private_lib_pkg_subdir_included_in_ld_library_path
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi

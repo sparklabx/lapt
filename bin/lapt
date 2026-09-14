@@ -88,7 +88,7 @@ _install_one() {
   local wrapper_kind; wrapper_kind=$(printf '%s\n' "$manifest" | lapt::needs_wrapper "$pkg")
   if [[ -n $wrapper_kind ]]; then
     local lib_dir="" bin_dir=""
-    [[ $wrapper_kind == *lib* ]] && lib_dir="$opt_dir/lib"
+    [[ $wrapper_kind == *lib* ]] && lib_dir=$(lapt::lib_dir_list "$work_dir/lib" "$opt_dir/lib" "$pkg")
     [[ $wrapper_kind == *bin* ]] && bin_dir="$opt_dir/bin"
     # work_dir is where the files physically live right now; opt_dir is the
     # final path they'll run from once the mv below lands, so the wrapper's
@@ -257,7 +257,7 @@ cmd_fix() {
       after_kind=$(printf '%s' "$wrap_manifest" | lapt::needs_wrapper "$pkg")
       if [[ -n $after_kind ]]; then
         local lib_dir="" bin_dir=""
-        [[ $after_kind == *lib* ]] && lib_dir="$opt_dir/lib"
+        [[ $after_kind == *lib* ]] && lib_dir=$(lapt::lib_dir_list "$opt_dir/lib" "$opt_dir/lib" "$pkg")
         [[ $after_kind == *bin* ]] && bin_dir="$opt_dir/bin"
         printf '%s' "$wrap_manifest" | lapt::wrap_top_level_bins "$opt_dir" "$opt_dir" "$pkg" "$lib_dir" "$bin_dir"
       fi
@@ -313,7 +313,7 @@ cmd_rewrap() {
   local wrapper_kind
   wrapper_kind=$(printf '%s' "$wrap_manifest" | lapt::needs_wrapper "$pkg")
   local lib_dir="" bin_dir=""
-  [[ $wrapper_kind == *lib* ]] && lib_dir="$opt_dir/lib"
+  [[ $wrapper_kind == *lib* ]] && lib_dir=$(lapt::lib_dir_list "$opt_dir/lib" "$opt_dir/lib" "$pkg")
   [[ $wrapper_kind == *bin* ]] && bin_dir="$opt_dir/bin"
 
   local already_wrapped=0

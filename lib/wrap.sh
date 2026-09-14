@@ -12,6 +12,22 @@ lapt::needs_wrapper() {
   [[ -f "$ROOT/pkgenv/$pkg" ]] && echo pkgenv
 }
 
+# Debian policy (ch. 9) recommends private, binary-only support files a
+# package needs but doesn't expose live under /usr/lib/<package-name>/ -- a
+# compiled-in RUNPATH that assumes that system path is wrong once lapt
+# relocates the package under $HOME/.lapt/opt.
+# LD_LIBRARY_PATH outranks RUNPATH in the dynamic linker's search order, so
+# listing that one policy-conventional subdir (if present) fixes it without
+# touching the binary. check_dir/final_dir split matches lapt::pkgenv_lines:
+# check_dir is where the dir is checked to exist right now, final_dir is what
+# the returned path is built from (where it'll actually run from).
+lapt::lib_dir_list() {
+  local check_dir=$1 final_dir=$2 pkg=$3
+  local dirs=$final_dir
+  [[ -d "$check_dir/$pkg" ]] && dirs+=":$final_dir/$pkg"
+  echo "$dirs"
+}
+
 lapt::wrap_top_level_bins() {
   local work_dir=$1 opt_dir=$2 pkg=$3 lib_dir=$4 bin_dir=$5
   local rel src origin

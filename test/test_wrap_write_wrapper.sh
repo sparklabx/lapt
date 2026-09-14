@@ -115,6 +115,36 @@ test_no_pkg_given_no_pkgenv_lines() {
   rm -rf "$dir"
 }
 
+# packages that ship private libs at lib/<pkg>/ (Debian policy's recommended
+# /usr/lib/<package-name>/ convention for private support files) -- the
+# subdir is named after pkg, and the returned path is built from final_dir
+# (not check_dir): install-time calls check_dir=work_dir/lib while the
+# wrapper's baked-in value must say opt_dir/lib.
+test_lib_dir_list_finds_private_pkg_subdir() {
+  local dir; dir=$(mktemp -d)
+  mkdir -p "$dir/check/scanmem"
+
+  assert_eq "lib dirs, check_dir == final_dir" \
+    "$dir/check:$dir/check/scanmem" \
+    "$(lapt::lib_dir_list "$dir/check" "$dir/check" "scanmem")"
+  assert_eq "lib dirs, check_dir != final_dir" \
+    "/opt/final:/opt/final/scanmem" \
+    "$(lapt::lib_dir_list "$dir/check" "/opt/final" "scanmem")"
+
+  rm -rf "$dir"
+}
+
+# no lib/<pkg>/ subdir (the common case -- most packages don't ship private
+# libs): just the root, no trailing colon
+test_lib_dir_list_no_private_subdir_is_just_root() {
+  local dir; dir=$(mktemp -d)
+  mkdir -p "$dir/check"
+
+  assert_eq "no private subdir" "$dir/check" "$(lapt::lib_dir_list "$dir/check" "$dir/check" "scanmem")"
+
+  rm -rf "$dir"
+}
+
 test_no_dirs_just_exec
 test_lib_dir_adds_ld_library_path
 test_bin_dir_adds_path
@@ -122,4 +152,6 @@ test_both_dirs_both_lines
 test_pkgenv_entry_adds_export
 test_pkgenv_entry_skips_missing_path
 test_no_pkg_given_no_pkgenv_lines
+test_lib_dir_list_finds_private_pkg_subdir
+test_lib_dir_list_no_private_subdir_is_just_root
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi
