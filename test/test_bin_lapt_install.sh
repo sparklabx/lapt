@@ -430,16 +430,18 @@ test_non_usr_content_is_bundled_and_noticed() {
 # pkgenv/file (checked into the repo) forces a wrapper even though "file"
 # has no lib/ and no foreign bin/ of its own -- otherwise the entry would be
 # dead code in the common case (see docs/adr/0015). The wrapper also
-# exports MAGIC, resolved to file's own bundled share/misc/magic.
+# exports MAGIC, resolved to file's own bundled share/misc/magic.mgc (the
+# real package ships share/misc/magic itself as a dangling symlink, so
+# pkgenv/file points at the compiled .mgc that actually exists).
 test_pkgenv_entry_forces_wrapper_with_no_lib_or_foreign_bin() {
   setup_fakes
   printf '%s\n' "file" > "$FIXTURE_DIR/closure/file"
   printf '%s' "1.0" > "$FIXTURE_DIR/candidate/file"
-  printf -- '-rwxr-xr-x root/root 4 2024-01-01 00:00 ./usr/bin/file\n-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/share/misc/magic\n' \
+  printf -- '-rwxr-xr-x root/root 4 2024-01-01 00:00 ./usr/bin/file\n-rw-r--r-- root/root 4 2024-01-01 00:00 ./usr/share/misc/magic.mgc\n' \
     > "$FIXTURE_DIR/deb_contents/file_1.0"
   mkdir -p "$FIXTURE_DIR/extract/file_1.0/usr/bin" "$FIXTURE_DIR/extract/file_1.0/usr/share/misc"
   printf 'real' > "$FIXTURE_DIR/extract/file_1.0/usr/bin/file"
-  printf 'magic' > "$FIXTURE_DIR/extract/file_1.0/usr/share/misc/magic"
+  printf 'magic' > "$FIXTURE_DIR/extract/file_1.0/usr/share/misc/magic.mgc"
 
   local out rc
   out=$(PATH="$FAKEBIN:$PATH" "$LAPT" install file 2>&1)
@@ -449,7 +451,7 @@ test_pkgenv_entry_forces_wrapper_with_no_lib_or_foreign_bin() {
   assert_exit0 "pkgenv-forced install exits 0: $out" "$rc"
   assert_eq "real binary moved aside" "real" "$(cat "$opt_dir/bin/file.real" 2>/dev/null)"
   assert_eq "wrapper exports MAGIC resolved under opt_dir" \
-    "$(printf '#!/bin/sh\nexport MAGIC="%s/share/misc/magic"\nexec "%s" "$@"' "$opt_dir" "$opt_dir/bin/file.real")" \
+    "$(printf '#!/bin/sh\nexport MAGIC="%s/share/misc/magic.mgc"\nexec "%s" "$@"' "$opt_dir" "$opt_dir/bin/file.real")" \
     "$(cat "$opt_dir/bin/file" 2>/dev/null)"
 
   teardown_fakes

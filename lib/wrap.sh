@@ -43,7 +43,10 @@ lapt::pkgenv_lines() {
     [[ -z $line ]] && continue
     var=${line%%=*}
     relpath=${line#*=}
-    [[ -e "$check_dir/$relpath" ]] || continue
+    if [[ ! -e "$check_dir/$relpath" ]]; then
+      echo "lapt: pkgenv/$pkg declares $var=$relpath, but $check_dir/$relpath doesn't exist -- skipping" >&2
+      continue
+    fi
     printf 'export %s="%s"\n' "$var" "$final_dir/$relpath"
   done < "$pkgenv_file"
 }

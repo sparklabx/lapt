@@ -83,16 +83,22 @@ test_pkgenv_entry_adds_export() {
 
 # pkgenv/bison has two lines (BISON_PKGDATADIR, M4); opt_dir only has the
 # share/bison path (M4's bin/m4 is missing, e.g. system-satisfied and never
-# bundled) -- the M4 line is skipped silently, not exported broken
+# bundled) -- the M4 line is skipped (not exported broken) but must warn,
+# not fail silently, so a bad pkgenv path doesn't go unnoticed
 test_pkgenv_entry_skips_missing_path() {
   local dir; dir=$(mktemp -d)
   mkdir -p "$dir/opt/share/bison"
 
-  lapt::write_wrapper "$dir/w" "/opt/bison/bin/bison.real" "" "" "bison" "$dir/opt" "$dir/opt"
+  local err
+  err=$(lapt::write_wrapper "$dir/w" "/opt/bison/bin/bison.real" "" "" "bison" "$dir/opt" "$dir/opt" 2>&1 >/dev/null)
 
   assert_eq "wrapper content" \
     "$(printf '#!/bin/sh\nexport BISON_PKGDATADIR="%s/share/bison"\nexec "/opt/bison/bin/bison.real" "$@"' "$dir/opt")" \
     "$(cat "$dir/w")"
+  case $err in
+    *"M4"*"bin/m4"*) ;;
+    *) printf 'FAIL: %s\n  expected warning naming M4=bin/m4, got: %s\n' "missing pkgenv path warns" "$err"; fail=1 ;;
+  esac
 
   rm -rf "$dir"
 }
