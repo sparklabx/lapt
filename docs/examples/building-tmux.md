@@ -21,9 +21,12 @@ point at that package's own `opt/<pkg>`.
 ```
 
 Requires both packages already installed (step 1) — `vendor` does no
-fetching of its own. Prints `PATH`, `LD_LIBRARY_PATH`, and
+fetching of its own. Prints `PATH`, `LD_LIBRARY_PATH`, `CPATH`, and
 `PKG_CONFIG_PATH` lines pointing at each package's own `opt/<pkg>` (in the
-order given), which the process substitution above sources directly.
+order given), which the process substitution above sources directly. The
+printed script dedups via the same guard `lapt init`'s env file uses, so
+it's also safe to persist into a shell startup file instead of sourcing ad
+hoc.
 
 ## 3. A build-time gotcha: bison
 
