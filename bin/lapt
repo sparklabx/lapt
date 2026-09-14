@@ -11,6 +11,22 @@ ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 lapt::die() { echo "lapt: $*" >&2; exit 1; }
 lapt::warn() { echo "lapt: $*" >&2; }
 
+# Shared by cmd_init's env file and cmd_vendor's printed script: a
+# dedup-guarded prepend, so re-sourcing (a nested shell, or a persisted
+# vendor script) doesn't keep growing the same var unbounded.
+_lapt_pathadd_def() {
+  cat <<'EOF'
+_lapt_pathadd() {
+  local -n __lapt_var=$2
+  case ":$__lapt_var:" in
+    *":$1:"*) ;;
+    *) __lapt_var="$1:$__lapt_var${3:-}" ;;
+  esac
+  export "$2"
+}
+EOF
+}
+
 usage() {
   cat <<'EOF'
 usage: lapt <command> [args]
@@ -264,13 +280,17 @@ cmd_vendor() {
   done
   (( ${#missing[@]} == 0 )) || lapt::die "not installed: ${missing[*]} — run 'lapt install' first"
 
+  _lapt_pathadd_def
+
   local opt_dir
   for pkg in "$@"; do
     opt_dir="$LAPT_HOME/opt/$pkg"
-    printf 'export PATH="%s/bin:$PATH"\n' "$opt_dir"
-    printf 'export LD_LIBRARY_PATH="%s/lib:$LD_LIBRARY_PATH"\n' "$opt_dir"
-    printf 'export PKG_CONFIG_PATH="%s/lib/pkgconfig:$PKG_CONFIG_PATH"\n' "$opt_dir"
+    printf '_lapt_pathadd "%s/bin" PATH\n' "$opt_dir"
+    printf '_lapt_pathadd "%s/lib" LD_LIBRARY_PATH\n' "$opt_dir"
+    printf '_lapt_pathadd "%s/include" CPATH\n' "$opt_dir"
+    printf '_lapt_pathadd "%s/lib/pkgconfig" PKG_CONFIG_PATH\n' "$opt_dir"
   done
+  echo 'unset -f _lapt_pathadd'
   return 0
 }
 
@@ -288,20 +308,13 @@ cmd_prune() {
 
 cmd_init() {
   mkdir -p "$LAPT_HOME"
-  cat > "$LAPT_HOME/env" <<'EOF'
-# source this to put lapt on PATH/MANPATH: . env
-_lapt_pathadd() {
-  local -n __lapt_var=$2
-  case ":$__lapt_var:" in
-    *":$1:"*) ;;
-    *) __lapt_var="$1:$__lapt_var${3:-}" ;;
-  esac
-  export "$2"
-}
-_lapt_pathadd "$HOME/.lapt/bin" PATH
-_lapt_pathadd "$HOME/.lapt/share/man" MANPATH ":"
-unset -f _lapt_pathadd
-EOF
+  {
+    echo '# source this to put lapt on PATH/MANPATH: . env'
+    _lapt_pathadd_def
+    echo '_lapt_pathadd "$HOME/.lapt/bin" PATH'
+    echo '_lapt_pathadd "$HOME/.lapt/share/man" MANPATH ":"'
+    echo 'unset -f _lapt_pathadd'
+  } > "$LAPT_HOME/env"
 
   echo "lapt: wrote $LAPT_HOME/env -- add this line to your ~/.bashrc:"
   echo '  . "$HOME/.lapt/env"'
