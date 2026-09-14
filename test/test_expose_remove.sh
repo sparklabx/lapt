@@ -44,6 +44,26 @@ test_reclaimed_symlink_left_alone() {
   rm -rf "$lapt_home"
 }
 
+# a package's own file is itself a symlink to a sibling file (e.g. Debian's
+# make ships bin/gmake -> make) -- removal must compare against the literal,
+# unresolved symlink target, not where it eventually resolves to, or the
+# exposed alias is wrongly treated as foreign and left orphaned
+test_own_symlink_alias_removed() {
+  local lapt_home opt; lapt_home=$(mktemp -d); opt="$lapt_home/opt/foo"
+  mkdir -p "$opt/bin"; : > "$opt/bin/foo"; ln -s foo "$opt/bin/gfoo"
+  mkdir -p "$lapt_home/bin"; ln -s "$opt/bin/gfoo" "$lapt_home/bin/gfoo"
+
+  printf 'bin/gfoo\n' | LAPT_HOME="$lapt_home" lapt::expose_remove "foo"
+
+  if [[ -e "$lapt_home/bin/gfoo" || -L "$lapt_home/bin/gfoo" ]]; then
+    printf 'FAIL: %s\n  expected symlink-alias removed, still present\n' "own symlink-alias removed"
+    fail=1
+  fi
+
+  rm -rf "$lapt_home"
+}
+
 test_own_symlink_removed
 test_reclaimed_symlink_left_alone
+test_own_symlink_alias_removed
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi
