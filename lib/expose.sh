@@ -9,7 +9,7 @@ lapt::expose_add() {
       *) continue ;;
     esac
     dest="$LAPT_HOME/$rel"
-    if [[ -L $dest && $(readlink -f "$dest") == "$opt_dir/$rel" ]]; then
+    if [[ -L $dest && $(readlink "$dest") == "$opt_dir/$rel" ]]; then
       echo "$rel"
       continue
     fi
@@ -31,7 +31,7 @@ lapt::expose_remove() {
   while IFS= read -r rel; do
     dest="$LAPT_HOME/$rel"
     [[ -L $dest ]] || continue
-    [[ $(readlink -f "$dest") == "$opt_dir/$rel" ]] || continue
+    [[ $(readlink "$dest") == "$opt_dir/$rel" ]] || continue
     rm -f "$dest"
   done
 }

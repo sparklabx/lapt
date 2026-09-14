@@ -145,6 +145,43 @@ test_already_correctly_exposed_row_is_left_alone() {
   rm -rf "$lapt_home"
 }
 
+# a package's own file is itself a symlink to a sibling file (e.g. Debian's
+# make ships bin/gmake -> make) -- exposing it must compare against the
+# literal, unresolved symlink target, not where it eventually resolves to,
+# or this row would wrongly look like a collision with itself
+test_symlink_alias_file_exposed() {
+  local lapt_home opt; lapt_home=$(mktemp -d); opt="$lapt_home/opt/foo"
+  mkdir -p "$opt/bin"; : > "$opt/bin/foo"; ln -s foo "$opt/bin/gfoo"
+
+  local out
+  out=$(printf 'bin/foo\t%s\tfoo\nbin/gfoo\t%s\tfoo\n' "$opt/bin/foo" "$opt/bin/gfoo" \
+    | LAPT_HOME="$lapt_home" lapt::expose_add "foo")
+  assert_eq "both rel paths printed" "$(printf 'bin/foo\nbin/gfoo')" "$out"
+  assert_eq "alias symlink's literal target is opt_dir/rel, not the resolved file" \
+    "$opt/bin/gfoo" "$(readlink "$lapt_home/bin/gfoo")"
+
+  rm -rf "$lapt_home"
+}
+
+# re-running expose_add against an already-exposed symlink-alias row (e.g.
+# `lapt expose foo` run twice) must recognize it as already correctly
+# exposed, not report a collision -- readlink -f would wrongly resolve
+# through the in-package alias to a different real file and never match
+test_already_exposed_symlink_alias_row_is_left_alone() {
+  local lapt_home opt; lapt_home=$(mktemp -d); opt="$lapt_home/opt/foo"
+  mkdir -p "$opt/bin"; : > "$opt/bin/foo"; ln -s foo "$opt/bin/gfoo"
+  mkdir -p "$lapt_home/bin"; ln -s "$opt/bin/gfoo" "$lapt_home/bin/gfoo"
+
+  local out rc
+  out=$(printf 'bin/gfoo\t%s\tfoo\n' "$opt/bin/gfoo" | LAPT_HOME="$lapt_home" lapt::expose_add "foo")
+  rc=$?
+  assert_eq "still reported as exposed" "bin/gfoo" "$out"
+  assert_eq "exits 0" "0" "$rc"
+  assert_eq "symlink target unchanged" "$opt/bin/gfoo" "$(readlink "$lapt_home/bin/gfoo")"
+
+  rm -rf "$lapt_home"
+}
+
 test_top_level_bin_file_exposed
 test_dependency_file_not_exposed
 test_non_exposable_category_not_exposed
@@ -153,4 +190,6 @@ test_nested_man_page_exposed
 test_collision_at_dest_is_not_exposed_and_fails
 test_collision_on_one_row_does_not_block_others
 test_already_correctly_exposed_row_is_left_alone
+test_symlink_alias_file_exposed
+test_already_exposed_symlink_alias_row_is_left_alone
 if [[ $fail -eq 0 ]]; then echo "OK"; else exit 1; fi
